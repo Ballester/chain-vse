@@ -3,6 +3,8 @@ import time
 import shutil
 
 import torch
+from torch.nn import functional as F
+from torch.nn.utils.clip_grad import clip_grad_norm
 
 import data
 from vocab import Vocabulary  # NOQA
@@ -85,7 +87,7 @@ def main():
     parser.add_argument('--pool', default='max',
                         help='Type of pooling used for conv models.')
     parser.add_argument('--kwargs', type=str, nargs='+', default=None,
-                        help='Additional args for the model. Usage: argument:type:value ')   
+                        help='Additional args for the model. Usage: argument:type:value ')
 
     opt = parser.parse_args()
 
@@ -108,7 +110,8 @@ def main():
         opt.data_name, tokenizer, opt.crop_size, opt.batch_size, opt.workers, opt, collate_fn)
 
     # Construct the model
-    model = VSE(opt)
+    model = create_model(opt)
+    model_ema = create_model(opt, ema=True)
     print model.txt_enc
 
     # optionally resume from a checkpoint
@@ -131,13 +134,14 @@ def main():
     # Train the Model
     best_rsum = 0
     for epoch in range(opt.num_epochs):
-        adjust_learning_rate(opt, model.optimizer, epoch)
+        adjust_learning_rate(opt, model.optimizer, epoch) # TODO use mean-teacher learning rate
+        consistency_weight = get_current_consistency_weight(20.0, epoch, 100) # TODO 20.0 weight and 100 rampup hardcoded  
 
         # train for one epoch
-        train(opt, train_loader, model, epoch, val_loader)
+        train(opt, train_loader, model, model_ema, epoch, val_loader)
 
         # evaluate on validation set
-        rsum = validate(opt, val_loader, model)
+        rsum = validate(opt, val_loader, model_ema)
 
         # remember best R@ sum and save checkpoint
         is_best = rsum > best_rsum
@@ -145,13 +149,14 @@ def main():
         save_checkpoint({
             'epoch': epoch + 1,
             'model': model.state_dict(),
+            'model_ema': model_ema.state_dict(),
             'best_rsum': best_rsum,
             'opt': opt,
             'Eiters': model.Eiters,
         }, is_best, prefix=opt.logger_name + '/')
 
 
-def train(opt, train_loader, model, epoch, val_loader):
+def train(opt, train_loader, model, model_ema, epoch, val_loader):
     # average meters to record the training statistics
     batch_time = AverageMeter()
     data_time = AverageMeter()
@@ -161,7 +166,7 @@ def train(opt, train_loader, model, epoch, val_loader):
     model.train_start()
 
     end = time.time()
-    for i, train_data in enumerate(train_loader):
+    for i, train_data in enumerate(train_loader): # TODO different data augmentation
         # measure data loading time
         data_time.update(time.time() - end)
 
@@ -169,7 +174,26 @@ def train(opt, train_loader, model, epoch, val_loader):
         model.logger = train_logger
 
         # Update the model
-        model.train_emb(*train_data)
+        img_emb, cap_emb = model.run_emb(*train_data)
+
+        with torch.no_grad():
+            img_emb_ema, cap_emb_ema = model_ema.run_emb(*train_data) # TODO maybe do consistency reversed?
+
+        consistency_loss_img = F.mse(img_emb, img_emb_ema)
+        consistency_loss_cap = F.mse(cap_emb, cap_emb_ema)
+        consistency_loss = consistency_loss_img + consistency_loss_cap
+
+        # measure accuracy and record loss
+        self.optimizer.zero_grad()
+        loss = self.forward_loss(img_emb, cap_emb)
+        total_loss = loss + consistency_weight*consistency_loss
+
+        # compute gradient and do SGD step
+        total_loss.backward()
+        if self.grad_clip > 0:
+            clip_grad_norm(self.params, self.grad_clip)
+        self.optimizer.step()
+
 
         # measure elapsed time
         batch_time.update(time.time() - end)
@@ -195,8 +219,8 @@ def train(opt, train_loader, model, epoch, val_loader):
 
         # validate at every val_step
         if model.Eiters % opt.val_step == 0:
-            validate(opt, val_loader, model)            
-            save_histograms(model, opt.logger_name, model.Eiters)            
+            validate(opt, val_loader, model)
+            save_histograms(model, opt.logger_name, model.Eiters)
 
 
 def validate(opt, val_loader, model):
@@ -239,7 +263,7 @@ def save_checkpoint(state, is_best, filename='checkpoint.pth.tar', prefix=''):
 
 
 def save_histograms(model, logger_name, curr_iter):
-    print 'saving histograms'    
+    print 'saving histograms'
     from matplotlib import pyplot as plt
     plt.switch_backend('agg')
 
@@ -284,6 +308,50 @@ def accuracy(output, target, topk=(1,)):
         res.append(correct_k.mul_(100.0 / batch_size))
     return res
 
+### MEAN-TEACHER ###
+def get_current_consistency_weight(weight, epoch, rampup):
+    """Consistency ramp-up from https://arxiv.org/abs/1610.02242"""
+    return weight * sigmoid_rampup(epoch, rampup)
+
+def update_ema_variables(model, ema_model, alpha, global_step):
+    alpha = min(1 - 1 / (global_step + 1), alpha)
+    for ema_param, param in zip(ema_model.parameters(), model.parameters()):
+        ema_param.data.mul_(alpha).add_(1 - alpha, param.data)
+
+def adjust_learning_rate_mean_teacher(optimizer, epoch, step_in_epoch,
+                                      total_steps_in_epoch, initial_lr, rampup_begin):
+    lr = initial_lr
+    epoch = epoch + step_in_epoch / total_steps_in_epoch
+
+    # LR warm-up to handle large minibatch sizes from https://arxiv.org/abs/1706.02677
+    lr = linear_rampup(epoch, 15) * (initial_lr - rampup_begin) + rampup_begin
+
+    for param_group in optimizer.param_groups:
+        param_group['lr'] = lr
+
+    return lr
+
+def linear_rampup(current, rampup_length):
+    """Linear rampup"""
+    assert current >= 0 and rampup_length >= 0
+    if current >= rampup_length:
+        return 1.0
+    else:
+        return current / rampup_length
+
+def cosine_rampdown(current, rampdown_length):
+    """Cosine rampdown from https://arxiv.org/abs/1608.03983"""
+    assert 0 <= current <= rampdown_length
+    return float(.5 * (np.cos(np.pi * current / rampdown_length) + 1))
+
+def create_model(opt, ema=False):
+    model = VSE(opt)
+
+    if ema:
+        for param in model.parameters():
+            param.detach_()
+
+    return model.cuda()
 
 if __name__ == '__main__':
     main()

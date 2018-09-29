@@ -4,7 +4,7 @@ import torch.nn.init
 import sys
 import numpy as np
 # sys.path.append('pretrained-models.pytorch/')
-# import pretrainedmodels 
+# import pretrainedmodels
 import torchvision.models as models
 
 import torch.backends.cudnn as cudnn
@@ -31,7 +31,7 @@ def print_summary(network):
     print('--'*30)
     print('Total parameters: {:,}'.format(total))
     print('--'*30)
-    
+
 
 def EncoderImage(data_name, img_dim, embed_size, finetune=False,
                  cnn_type='vgg19', use_abs=False, no_imgnorm=False):
@@ -269,9 +269,9 @@ class VSE(object):
                                     opt.finetune, opt.cnn_type,
                                     use_abs=opt.use_abs,
                                     no_imgnorm=opt.no_imgnorm)
-        
+
         self.txt_enc = get_text_encoder(opt.text_encoder, opt)
-        
+
         if torch.cuda.is_available():
             self.img_enc.cuda()
             self.txt_enc.cuda()
@@ -280,15 +280,14 @@ class VSE(object):
         # Loss and Optimizer
         self.criterion = ContrastiveLoss(margin=opt.margin,
                                          measure=opt.measure,
-                                         max_violation=opt.max_violation,
-                                         sim_power=opt.sim_power)
+                                         max_violation=opt.max_violation)
 
         self.attention = False
         if opt.text_encoder.startswith('attentive'):
             self.init_attention()
 
         params = list(self.txt_enc.parameters())
-        if self.img_enc.fc:        
+        if self.img_enc.fc:
             params += list(self.img_enc.fc.parameters())
         if opt.finetune:
             params += list(self.img_enc.cnn.parameters())
@@ -347,9 +346,9 @@ class VSE(object):
     def forward_loss(self, img_emb, cap_emb, **kwargs):
         """Compute the loss given pairs of image and caption embeddings
         """
-        
+
         loss = self.criterion(img_emb, cap_emb)
-        if self.attention:  
+        if self.attention:
             coef = self.opt.att_coef
             attention = self.txt_enc.attention_weights
             attentionT = torch.transpose(attention, 1, 2).contiguous()
@@ -358,7 +357,7 @@ class VSE(object):
 
             self.logger.update('TotalLoss', total_loss.data[0], img_emb.size(0))
             self.logger.update('AttLoss', coef * extra_loss.data[0], img_emb.size(0))
-        
+
         self.logger.update('ContrLoss', loss.data[0], img_emb.size(0))
         return loss
 
@@ -381,3 +380,11 @@ class VSE(object):
         if self.grad_clip > 0:
             clip_grad_norm(self.params, self.grad_clip)
         self.optimizer.step()
+
+
+    def run_emb(self, images, captions, lengths ids=None, *args):
+        """Running embeddings for mean-teacher
+        """
+        img_emb, cap_emb = self.forward_emb(images, captions, lengths)
+
+        return img_emb, cap_emb
