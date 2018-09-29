@@ -260,7 +260,7 @@ class VSE(object):
     rkiros/uvs model
     """
 
-    def __init__(self, opt):
+    def __init__(self, opt, ema=False):
         # tutorials/09 - Image Captioning
         # Build Models
         self.opt = opt
@@ -293,7 +293,11 @@ class VSE(object):
             params += list(self.img_enc.cnn.parameters())
         self.params = params
 
-        self.optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, self.params), lr=opt.learning_rate)
+        if ema:
+            for param in filter(lambda p: p.requires_grad, self.params):
+                param.detach_()
+        else:
+            self.optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, self.params), lr=opt.learning_rate)
 
         self.Eiters = 0
 
@@ -382,7 +386,7 @@ class VSE(object):
         self.optimizer.step()
 
 
-    def run_emb(self, images, captions, lengths ids=None, *args):
+    def run_emb(self, images, captions, lengths, ids=None, *args):
         """Running embeddings for mean-teacher
         """
         img_emb, cap_emb = self.forward_emb(images, captions, lengths)

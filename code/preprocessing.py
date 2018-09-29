@@ -40,7 +40,7 @@ class Text2Char(object):
         self.alphabet_dict = alphabet_dict
         self.n_alphabet = len(alphabet) + chars_to_compensate
 
-        self.reversed_alphabet_dict = {i: x for (x, i) in alphabet_dict.iteritems()}
+        self.reversed_alphabet_dict = {i: x for (x, i) in alphabet_dict.items()}
         self.alphabet_dict.update(self._get_special_chars())
         
     def _get_special_chars(self,):

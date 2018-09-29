@@ -1,6 +1,7 @@
 import os
 import time
 import shutil
+import numpy as np
 
 import torch
 from torch.nn import functional as F
@@ -108,11 +109,13 @@ def main():
     # Load data loaders
     train_loader, val_loader = data.get_loaders(
         opt.data_name, tokenizer, opt.crop_size, opt.batch_size, opt.workers, opt, collate_fn)
+    adapt_loader, val_adapt_loader = data.get_loaders(
+        opt.data_name, tokenizer, opt.crop_size, opt.batch_size, opt.workers, opt, collate_fn) # TODO set correct dataset
 
     # Construct the model
     model = create_model(opt)
     model_ema = create_model(opt, ema=True)
-    print model.txt_enc
+    print(model.txt_enc)
 
     # optionally resume from a checkpoint
     if opt.resume:
@@ -135,13 +138,14 @@ def main():
     best_rsum = 0
     for epoch in range(opt.num_epochs):
         adjust_learning_rate(opt, model.optimizer, epoch) # TODO use mean-teacher learning rate
-        consistency_weight = get_current_consistency_weight(20.0, epoch, 100) # TODO 20.0 weight and 100 rampup hardcoded  
+        consistency_weight = get_current_consistency_weight(20.0, epoch, 100) # TODO 20.0 weight and 100 rampup hardcoded
 
         # train for one epoch
-        train(opt, train_loader, model, model_ema, epoch, val_loader)
+        train(opt, train_loader, adapt_loader, model, model_ema, epoch, val_loader)
 
         # evaluate on validation set
         rsum = validate(opt, val_loader, model_ema)
+        rsum_adapt = validate(opt, val_adapt_loader, model_ema)
 
         # remember best R@ sum and save checkpoint
         is_best = rsum > best_rsum
@@ -156,7 +160,7 @@ def main():
         }, is_best, prefix=opt.logger_name + '/')
 
 
-def train(opt, train_loader, model, model_ema, epoch, val_loader):
+def train(opt, train_loader, adapt_loader, model, model_ema, epoch, val_loader):
     # average meters to record the training statistics
     batch_time = AverageMeter()
     data_time = AverageMeter()
@@ -164,20 +168,28 @@ def train(opt, train_loader, model, model_ema, epoch, val_loader):
 
     # switch to train mode
     model.train_start()
+    model_ema.train_start()
 
     end = time.time()
+    adapt_iter = iter(adapt_loader)
+
     for i, train_data in enumerate(train_loader): # TODO different data augmentation
         # measure data loading time
         data_time.update(time.time() - end)
 
         # make sure train logger is used
         model.logger = train_logger
+        try:
+            adapt_data = adapt_iter.next()
+        except:
+            adapt_iter = iter(adapt_loader)
+            adapt_data = adapt_iter.next()
 
         # Update the model
         img_emb, cap_emb = model.run_emb(*train_data)
 
         with torch.no_grad():
-            img_emb_ema, cap_emb_ema = model_ema.run_emb(*train_data) # TODO maybe do consistency reversed?
+            img_emb_ema, cap_emb_ema = model_ema.run_emb(*adapt_data) # TODO maybe do consistency reversed?
 
         consistency_loss_img = F.mse(img_emb, img_emb_ema)
         consistency_loss_cap = F.mse(cap_emb, cap_emb_ema)
@@ -263,7 +275,7 @@ def save_checkpoint(state, is_best, filename='checkpoint.pth.tar', prefix=''):
 
 
 def save_histograms(model, logger_name, curr_iter):
-    print 'saving histograms'
+    print('saving histograms')
     from matplotlib import pyplot as plt
     plt.switch_backend('agg')
 
@@ -276,7 +288,7 @@ def save_histograms(model, logger_name, curr_iter):
     encoder = model.txt_enc
     n_layers = len(encoder.outputs)
     fig, ax = plt.subplots(n_layers, figsize=(10, 4*n_layers))
-    for z, (l_name, l_cont) in enumerate(sorted(encoder.outputs.iteritems())):
+    for z, (l_name, l_cont) in enumerate(sorted(encoder.outputs.items())):
     #     curr_axis = ax[z%3, z%4]
         curr_axis = ax[z]
         curr_axis.set_title('{}/{}'.format(l_name, l_cont.size()))
@@ -339,19 +351,24 @@ def linear_rampup(current, rampup_length):
     else:
         return current / rampup_length
 
+def sigmoid_rampup(current, rampup_length):
+    if rampup_length == 0:
+        return 1.0
+    else:
+        current = np.clip(current, 0.0, rampup_length)
+        phase = 1.0 - current / rampup_length
+        return float(np.exp(-5.0 * phase * phase))
+
+
 def cosine_rampdown(current, rampdown_length):
     """Cosine rampdown from https://arxiv.org/abs/1608.03983"""
     assert 0 <= current <= rampdown_length
     return float(.5 * (np.cos(np.pi * current / rampdown_length) + 1))
 
 def create_model(opt, ema=False):
-    model = VSE(opt)
+    model = VSE(opt, ema)
 
-    if ema:
-        for param in model.parameters():
-            param.detach_()
-
-    return model.cuda()
+    return model
 
 if __name__ == '__main__':
     main()
