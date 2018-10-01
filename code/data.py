@@ -35,6 +35,9 @@ def get_paths(path, name='coco', use_restval=False):
             'img': os.path.join(imgdir, 'train2014'),
             'cap': os.path.join(capdir, 'captions_train2014.json')
         }
+        roots['unlabeled'] = {
+            'img': os.path.join(imgdir, 'unlabeled'),
+        }
         roots['val'] = {
             'img': os.path.join(imgdir, 'val2014'),
             'cap': os.path.join(capdir, 'captions_val2014.json')
@@ -137,6 +140,38 @@ class CocoDataset(data.Dataset):
 
     def __len__(self):
         return len(self.ids)
+
+
+class UnlabeledCocoDataset(data.Dataset):
+    """COCO Custom Dataset compatible with torch.utils.data.DataLoader."""
+
+    def __init__(self, root, transform=None,):
+        """
+        Args:
+            root: image directory.
+            json: coco annotation file path.
+            tokenizer: tokenizer wrapper.
+            transform: transformer for image.
+        """
+        self.root = root        
+        self.files = os.listdir(root)        
+        self.n = len(self.files)
+        self.transform = transform        
+
+    def __getitem__(self, index):
+        """This function returns a tuple that is further passed to collate_fn
+        """        
+
+        path = self.files[index]
+        image = Image.open(os.path.join(self.root, path)).convert('RGB')
+
+        if self.transform is not None:
+            image = self.transform(image)
+                    
+        return image, path, index
+
+    def __len__(self):
+        return self.n
 
 
 class FlickrDataset(data.Dataset):
@@ -277,7 +312,7 @@ def collate_fn(data):
     images = torch.stack(images, 0)
 
     # Merget captions (convert tuple of 1D tensor to 2D tensor)
-    lengths = map(len, captions)
+    lengths = list(map(len, captions))
 
     targets = torch.zeros(len(captions), max(lengths)).long()
     for i, cap in enumerate(captions):
@@ -351,7 +386,8 @@ def get_loader_single(data_name, split, root, json, tokenizer, transform,
         dataset = CocoDataset(root=root,
                               json=json,
                               tokenizer=tokenizer,
-                              transform=transform, ids=ids)
+                              transform=transform, 
+                              ids=ids)
 
     elif 'f8k' in data_name or 'f30k' in data_name:
         dataset = FlickrDataset(root=root,
@@ -443,6 +479,19 @@ def get_loaders(data_name, tokenizer, crop_size, batch_size, workers, opt, colla
                                        batch_size=batch_size, shuffle=False,
                                        num_workers=workers,
                                        collate_fn=cfn)
+
+        if opt.add_data:
+            adapt_dataset = UnlabeledCocoDataset(
+                                root=roots['unlabeled']['img'], 
+                                transform=transform)
+            
+            adapt_loader = torch.utils.data.DataLoader(dataset=adapt_dataset,
+                                              batch_size=batch_size,
+                                              shuffle=True,
+                                              pin_memory=True,
+                                              num_workers=4,
+                                              )
+            return (train_loader, adapt_loader), val_loader
 
     return train_loader, val_loader
 

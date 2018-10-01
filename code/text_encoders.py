@@ -357,7 +357,7 @@ def get_text_encoder(encoder, opt):
         if encoder.startswith('attentive'):
             params['att_units'] = opt.att_units 
             params['hops'] = opt.att_hops
-            params['norm_words'] = norm_words,
+            params['norm_words'] = norm_words
 
     params.update(text_encoders_alias[encoder]['args'])
     params.update(model_args)

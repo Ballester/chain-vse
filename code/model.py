@@ -301,6 +301,11 @@ class VSE(object):
 
         self.Eiters = 0
 
+    def get_params(self):
+        params = list(self.img_enc.fc.parameters())
+        params += list(self.img_enc.cnn.parameters())
+        return params
+
     def init_attention(self):
         opt = self.opt
         self.attention = True
@@ -383,8 +388,7 @@ class VSE(object):
         loss.backward()
         if self.grad_clip > 0:
             clip_grad_norm(self.params, self.grad_clip)
-        self.optimizer.step()
-
+        self.optimizer.step()    
 
     def run_emb(self, images, captions, lengths, ids=None, *args):
         """Running embeddings for mean-teacher

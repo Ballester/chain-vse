@@ -85,6 +85,8 @@ def main():
                         help='Do not normalize the image embeddings.')
     parser.add_argument('--text_encoder', default='GRU',
                         help='[GRU|Conv].')
+    parser.add_argument('--add_data', action='store_true',
+                        help='Wheter to use additional unlabeled data.')
     parser.add_argument('--pool', default='max',
                         help='Type of pooling used for conv models.')
     parser.add_argument('--kwargs', type=str, nargs='+', default=None,
@@ -100,7 +102,7 @@ def main():
     logging.basicConfig(format='%(asctime)s %(message)s', level=logging.INFO)
     tb_logger.configure(opt.logger_name, flush_secs=5)
 
-    tokenizer, vocab_size = data.get_tokenizer(opt.vocab_path, opt.data_name)
+    tokenizer, vocab_size = data.get_tokenizer(opt.vocab_path, opt.data_name)    
     opt.vocab_size = vocab_size
 
     collate_fn = 'collate_fn'
@@ -109,12 +111,18 @@ def main():
     # Load data loaders
     train_loader, val_loader = data.get_loaders(
         opt.data_name, tokenizer, opt.crop_size, opt.batch_size, opt.workers, opt, collate_fn)
-    adapt_loader, val_adapt_loader = data.get_loaders(
-        opt.data_name, tokenizer, opt.crop_size, opt.batch_size, opt.workers, opt, collate_fn) # TODO set correct dataset
+    if opt.add_data:
+        train_loader, adapt_loader = train_loader
+    # adapt_loader, val_adapt_loader = data.get_loaders(
+    #     opt.data_name, tokenizer, opt.crop_size, opt.batch_size, opt.workers, opt, collate_fn) # TODO set correct dataset
 
+    print('[OK] Loaders.')
+    
     # Construct the model
     model = create_model(opt)
     model_ema = create_model(opt, ema=True)
+    
+    print('[OK] model')
     print(model.txt_enc)
 
     # optionally resume from a checkpoint
@@ -145,7 +153,7 @@ def main():
 
         # evaluate on validation set
         rsum = validate(opt, val_loader, model_ema)
-        rsum_adapt = validate(opt, val_adapt_loader, model_ema)
+        # rsum_adapt = validate(opt, val_adapt_loader, model_ema)
 
         # remember best R@ sum and save checkpoint
         is_best = rsum > best_rsum
@@ -166,50 +174,74 @@ def train(opt, train_loader, adapt_loader, model, model_ema, epoch, val_loader):
     data_time = AverageMeter()
     train_logger = LogCollector()
 
-    # switch to train mode
-    model.train_start()
-    model_ema.train_start()
+
 
     end = time.time()
     adapt_iter = iter(adapt_loader)
+    adapt_loss = torch.nn.MSELoss()
+
+    consistency_weight = 20.
 
     for i, train_data in enumerate(train_loader): # TODO different data augmentation
         # measure data loading time
         data_time.update(time.time() - end)
+        model.Eiters += 1
+
+        # switch to train mode
+        model.train_start()
+        model_ema.train_start()
 
         # make sure train logger is used
         model.logger = train_logger
+
         try:
-            adapt_data = adapt_iter.next()
+            adapt_data = next(adapt_iter)
         except:
             adapt_iter = iter(adapt_loader)
-            adapt_data = adapt_iter.next()
-
+            adapt_data = next(adapt_iter)
+            
+        unlabel_imgs, _, _ = adapt_data
         # Update the model
         img_emb, cap_emb = model.run_emb(*train_data)
 
-        with torch.no_grad():
-            img_emb_ema, cap_emb_ema = model_ema.run_emb(*adapt_data) # TODO maybe do consistency reversed?
+        with torch.no_grad():            
 
-        consistency_loss_img = F.mse(img_emb, img_emb_ema)
-        consistency_loss_cap = F.mse(cap_emb, cap_emb_ema)
-        consistency_loss = consistency_loss_img + consistency_loss_cap
+            all_images = torch.cat([train_data[0], unlabel_imgs], 0)            
+            
+            ema_all_imgs_emb = model_ema.img_enc(all_images) 
+            
+            unlabel_imgs_emb = model.img_enc(unlabel_imgs)
+
+            all_imgs_emb = torch.cat([img_emb, unlabel_imgs_emb], 0)
+            # img_emb_ema, cap_emb_ema = model_ema.run_emb(*adapt_data) # TODO maybe do consistency reversed?
+            # print(img_emb_ema.shape, cap_emb_ema.size())
+             
+        consistency_loss_img = adapt_loss(all_imgs_emb, ema_all_imgs_emb)        
+        consistency_loss = consistency_loss_img * consistency_weight
 
         # measure accuracy and record loss
-        self.optimizer.zero_grad()
-        loss = self.forward_loss(img_emb, cap_emb)
-        total_loss = loss + consistency_weight*consistency_loss
+        model.optimizer.zero_grad()
+        loss = model.forward_loss(img_emb, cap_emb)
+        total_loss = loss + consistency_weight
 
         # compute gradient and do SGD step
         total_loss.backward()
-        if self.grad_clip > 0:
-            clip_grad_norm(self.params, self.grad_clip)
-        self.optimizer.step()
+        if model.grad_clip > 0:
+            clip_grad_norm(model.params, model.grad_clip)
+        model.optimizer.step()
 
+        update_ema_variables(model=model, 
+                             ema_model=model_ema, 
+                             alpha=0.99,  # TODO: adjust alpha 
+                             global_step=model.Eiters)
 
         # measure elapsed time
         batch_time.update(time.time() - end)
         end = time.time()
+
+        model.logger.update('Iter', model.Eiters)
+        model.logger.update('lr', model.optimizer.param_groups[0]['lr'])
+        model.logger.update('Adapt Loss', consistency_loss.item())
 
         # Print log info
         if model.Eiters % opt.log_step == 0:
@@ -231,8 +263,7 @@ def train(opt, train_loader, adapt_loader, model, model_ema, epoch, val_loader):
 
         # validate at every val_step
         if model.Eiters % opt.val_step == 0:
-            validate(opt, val_loader, model)
-            save_histograms(model, opt.logger_name, model.Eiters)
+            validate(opt, val_loader, model)            
 
 
 def validate(opt, val_loader, model):
@@ -327,7 +358,7 @@ def get_current_consistency_weight(weight, epoch, rampup):
 
 def update_ema_variables(model, ema_model, alpha, global_step):
     alpha = min(1 - 1 / (global_step + 1), alpha)
-    for ema_param, param in zip(ema_model.parameters(), model.parameters()):
+    for ema_param, param in zip(ema_model.get_params(), model.get_params()):
         ema_param.data.mul_(alpha).add_(1 - alpha, param.data)
 
 def adjust_learning_rate_mean_teacher(optimizer, epoch, step_in_epoch,

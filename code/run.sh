@@ -1,1 +1,12 @@
-python2 train.py --data_name resnet152_precomp --logger_name runs/chain-v1/resnet152_precomp/  --text_encoder chain-v1 --embed_size 2048 --vocab_path char
+python train.py \
+--data_name coco \
+--cnn_type vgg19 \
+--text_encoder gru \
+--max_violation \
+--vocab ./vocab \
+--batch_size 75 \
+--add_data \
+--use_restval \
+--logger_name runs/vgg19_adjs \
+--learning_rate 2e-4 \
+--margin 0.2

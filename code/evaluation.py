@@ -211,11 +211,11 @@ def i2t(images, captions, npts=None, measure='cosine', return_ranks=False):
     Captions: (5N, K) matrix of captions
     """
     if npts is None:
-        npts = images.shape[0] / 5
+        npts = int(images.shape[0] / 5)
     index_list = []
 
-    ranks = numpy.zeros(npts)
-    top1 = numpy.zeros(npts)
+    ranks = numpy.zeros(int(npts))
+    top1 = numpy.zeros(int(npts))
     for index in range(npts):
 
         # Get query image
@@ -264,11 +264,11 @@ def t2i(images, captions, npts=None, measure='cosine', return_ranks=False):
     Captions: (5N, K) matrix of captions
     """
     if npts is None:
-        npts = images.shape[0] / 5
+        npts = int(images.shape[0] / 5)
     ims = numpy.array([images[i] for i in range(0, len(images), 5)])
 
-    ranks = numpy.zeros(5 * npts)
-    top1 = numpy.zeros(5 * npts)
+    ranks = numpy.zeros(int(5 * npts))
+    top1 = numpy.zeros(int(5 * npts))
     for index in range(npts):
 
         # Get query captions
@@ -303,30 +303,3 @@ def t2i(images, captions, npts=None, measure='cosine', return_ranks=False):
         return (r1, r5, r10, medr, meanr), (ranks, top1)
     else:
         return (r1, r5, r10, medr, meanr)
-
-
-if __name__ == '__main__':
-
-    def format_float(X):
-        return '\t'.join(['{5.4f}'.format(x) for x in X])
-
-    import os 
-    path = '/A/VSE/IJCNN18/densenet/irv2_precomp/dense_small_deep/d1024/'
-    output = ''
-    for root, dirs, files in os.walk(path):
-
-        for file in files: 
-            if file != 'model_best.pth.tar':
-                continue
-
-            print('Processing ', root, file)
-            results, metrics = evalrank(os.path.join(root, file), data_path=None, split='test', fold5=True, test_measure=None, log_step=1000)
-            print(results[0])
-            print(metrics[0])
-            line = (root.split('/'), format_float(results[0]), format_float(metrics))
-            print(line)
-            output.append(line)
-
-    print('Output Result:')
-    for line in output:
-        print(line)

@@ -30,7 +30,7 @@ class WordTokenizer(TokenizerBase):
 
         # Convert caption (string) to word ids.
         tokens = nltk.tokenize.word_tokenize(
-            str(text).lower().decode('utf-8'))
+            str(text).lower())
         caption = []
         caption.append(vocab('<start>'))
         caption.extend([vocab(token) for token in tokens])
