@@ -102,7 +102,7 @@ def main():
     logging.basicConfig(format='%(asctime)s %(message)s', level=logging.INFO)
     tb_logger.configure(opt.logger_name, flush_secs=5)
 
-    tokenizer, vocab_size = data.get_tokenizer(opt.vocab_path, opt.data_name)    
+    tokenizer, vocab_size = data.get_tokenizer(opt.vocab_path, opt.data_name)
     opt.vocab_size = vocab_size
 
     collate_fn = 'collate_fn'
@@ -117,11 +117,11 @@ def main():
     #     opt.data_name, tokenizer, opt.crop_size, opt.batch_size, opt.workers, opt, collate_fn) # TODO set correct dataset
 
     print('[OK] Loaders.')
-    
+
     # Construct the model
     model = create_model(opt)
     model_ema = create_model(opt, ema=True)
-    
+
     print('[OK] model')
     print(model.txt_enc)
 
@@ -199,30 +199,23 @@ def train(opt, train_loader, adapt_loader, model, model_ema, epoch, val_loader):
         except:
             adapt_iter = iter(adapt_loader)
             adapt_data = next(adapt_iter)
-            
-        unlabel_imgs, _, _ = adapt_data
+
+        unlabel_imgs, unlabel_imgs_ema, _, _ = adapt_data
         # Update the model
         img_emb, cap_emb = model.run_emb(*train_data)
 
-        with torch.no_grad():            
+        with torch.no_grad():
+            ema_unlabel_img_emb = model_ema.img_enc(unlabel_imgs_ema)
 
-            all_images = torch.cat([train_data[0], unlabel_imgs], 0)            
-            
-            ema_all_imgs_emb = model_ema.img_enc(all_images) 
-            
-            unlabel_imgs_emb = model.img_enc(unlabel_imgs)
+        unlabel_img_emb = model.img_enc(unlabel_imgs)
 
-            all_imgs_emb = torch.cat([img_emb, unlabel_imgs_emb], 0)
-            # img_emb_ema, cap_emb_ema = model_ema.run_emb(*adapt_data) # TODO maybe do consistency reversed?
-            # print(img_emb_ema.shape, cap_emb_ema.size())
-             
-        consistency_loss_img = adapt_loss(all_imgs_emb, ema_all_imgs_emb)        
+        consistency_loss_img = adapt_loss(ema_unlabel_img_emb, unlabel_img_emb)
         consistency_loss = consistency_loss_img * consistency_weight
 
         # measure accuracy and record loss
         model.optimizer.zero_grad()
         loss = model.forward_loss(img_emb, cap_emb)
-        total_loss = loss + consistency_weight
+        total_loss = loss + consistency_loss
 
         # compute gradient and do SGD step
         total_loss.backward()
@@ -230,9 +223,9 @@ def train(opt, train_loader, adapt_loader, model, model_ema, epoch, val_loader):
             clip_grad_norm(model.params, model.grad_clip)
         model.optimizer.step()
 
-        update_ema_variables(model=model, 
-                             ema_model=model_ema, 
-                             alpha=0.99,  # TODO: adjust alpha 
+        update_ema_variables(model=model,
+                             ema_model=model_ema,
+                             alpha=0.99,  # TODO: adjust alpha
                              global_step=model.Eiters)
 
         # measure elapsed time
@@ -263,7 +256,7 @@ def train(opt, train_loader, adapt_loader, model, model_ema, epoch, val_loader):
 
         # validate at every val_step
         if model.Eiters % opt.val_step == 0:
-            validate(opt, val_loader, model)            
+            validate(opt, val_loader, model_ema)
 
 
 def validate(opt, val_loader, model):

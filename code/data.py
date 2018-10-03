@@ -153,22 +153,23 @@ class UnlabeledCocoDataset(data.Dataset):
             tokenizer: tokenizer wrapper.
             transform: transformer for image.
         """
-        self.root = root        
-        self.files = os.listdir(root)        
+        self.root = root
+        self.files = os.listdir(root)
         self.n = len(self.files)
-        self.transform = transform        
+        self.transform = transform
 
     def __getitem__(self, index):
         """This function returns a tuple that is further passed to collate_fn
-        """        
+        """
 
         path = self.files[index]
         image = Image.open(os.path.join(self.root, path)).convert('RGB')
 
         if self.transform is not None:
-            image = self.transform(image)
-                    
-        return image, path, index
+            image_std = self.transform(image)
+            image_ema = self.transform(image)
+
+        return image_std, image_ema, path, index
 
     def __len__(self):
         return self.n
@@ -271,7 +272,7 @@ class PrecompDataset(data.Dataset):
         self.captions = grouped_
         self.images   = self.images[argsort]
 
-        if limit: 
+        if limit:
             self.captions = self.captions[:limit]
             self.images   = self.images[:limit/self.im_div]
             self.length = limit
@@ -324,11 +325,11 @@ def collate_fn(data):
 
 
 def split_array(iterable, splitters=[0, 1, 2, 3]):
-    import itertools            
+    import itertools
     return [torch.LongTensor(list(g))
-            for k, g in itertools.groupby(iterable, 
-                 lambda x: x in splitters) 
-                 if not k]                   
+            for k, g in itertools.groupby(iterable,
+                 lambda x: x in splitters)
+                 if not k]
 
 
 def collate_fn_partial(data):
@@ -350,29 +351,29 @@ def collate_fn_partial(data):
     images, captions, ids, img_ids = zip(*data)
 
     splitted_caps = []
-    for caption in captions:    
-        sc = split_array(caption) 
-        splitted_caps.append(sc) 
+    for caption in captions:
+        sc = split_array(caption)
+        splitted_caps.append(sc)
 
-    sent_lens = map(len, splitted_caps)    
+    sent_lens = map(len, splitted_caps)
 
-    data = sorted(zip(images, captions, ids, img_ids, splitted_caps, sent_lens), 
+    data = sorted(zip(images, captions, ids, img_ids, splitted_caps, sent_lens),
                         key=lambda z: z[-1], reverse=True)
 
     images, captions, ids, img_ids, splitted_caps, sent_lens = zip(*data)
-    
-    all_words = flatten(splitted_caps)    
+
+    all_words = flatten(splitted_caps)
     word_lens = map(len, all_words)
 
     # Merge images (convert tuple of 3D tensor to 4D tensor)
     images = torch.stack(images, 0)
-    
-    targets = torch.zeros(len(captions), max(sent_lens), max(word_lens)).long()    
-    for i, cap in enumerate(splitted_caps):    
-        end_sentence = sent_lens[i]    
+
+    targets = torch.zeros(len(captions), max(sent_lens), max(word_lens)).long()
+    for i, cap in enumerate(splitted_caps):
+        end_sentence = sent_lens[i]
         for j, word in enumerate(cap):
-            end_word = len(word)        
-            targets[i, j, :end_word] = word[:end_word]    
+            end_word = len(word)
+            targets[i, j, :end_word] = word[:end_word]
 
     return images, targets, sent_lens, ids
 
@@ -386,7 +387,7 @@ def get_loader_single(data_name, split, root, json, tokenizer, transform,
         dataset = CocoDataset(root=root,
                               json=json,
                               tokenizer=tokenizer,
-                              transform=transform, 
+                              transform=transform,
                               ids=ids)
 
     elif 'f8k' in data_name or 'f30k' in data_name:
@@ -396,7 +397,7 @@ def get_loader_single(data_name, split, root, json, tokenizer, transform,
                                 tokenizer=tokenizer,
                                 transform=transform)
 
-    # It crashes when using CPU-only and pin_memory 
+    # It crashes when using CPU-only and pin_memory
     pin_memory = False
     if torch.cuda.is_available():
         pin_memory = True
@@ -454,7 +455,7 @@ def get_loaders(data_name, tokenizer, crop_size, batch_size, workers, opt, colla
     if opt.data_name.endswith('_precomp'):
         train_loader = get_precomp_loader(dpath, 'train', tokenizer, opt,
                                           batch_size, True, workers, cfn)
-        
+
         val_loader = get_precomp_loader(dpath, 'dev', tokenizer, opt,
                                         batch_size, False, workers,
                                         cfn)
@@ -482,9 +483,9 @@ def get_loaders(data_name, tokenizer, crop_size, batch_size, workers, opt, colla
 
         if opt.add_data:
             adapt_dataset = UnlabeledCocoDataset(
-                                root=roots['unlabeled']['img'], 
+                                root=roots['unlabeled']['img'],
                                 transform=transform)
-            
+
             adapt_loader = torch.utils.data.DataLoader(dataset=adapt_dataset,
                                               batch_size=batch_size,
                                               shuffle=True,
@@ -503,7 +504,7 @@ def get_test_loader(split_name, data_name, tokenizer, crop_size, batch_size,
     dpath = os.path.join(opt.data_path, data_name)
     if opt.data_name.endswith('_precomp'):
         test_loader = get_precomp_loader(dpath, split_name, tokenizer, opt,
-                                         batch_size, False, workers)        
+                                         batch_size, False, workers)
     else:
         # Build Dataset Loader
         roots, ids = get_paths(dpath, data_name, opt.use_restval)
@@ -520,13 +521,13 @@ def get_test_loader(split_name, data_name, tokenizer, crop_size, batch_size,
 
 
 def get_tokenizer(vocab_path, data_name):
-    
+
     from tokenizers import WordTokenizer
     from tokenizers import CharacterTokenizer
 
     if vocab_path.startswith('char'):
         tokenizer = CharacterTokenizer()
-        vocab_size = tokenizer.encoder.n_alphabet         
+        vocab_size = tokenizer.encoder.n_alphabet
     else:
         vocab_path = os.path.join(vocab_path, '%s_vocab.pkl' % data_name)
         tokenizer = WordTokenizer(vocab_path)
@@ -536,5 +537,5 @@ def get_tokenizer(vocab_path, data_name):
 
 
 def splitlist(iterable, splitters):
-    import itertools    
-    return [(list(g)) for k, g in itertools.groupby(iterable, lambda x: x in splitters) if not k]    
+    import itertools
+    return [(list(g)) for k, g in itertools.groupby(iterable, lambda x: x in splitters) if not k]
