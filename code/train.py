@@ -18,11 +18,12 @@ from evaluation import encode_data
 
 import logging
 import tensorboard_logger as tb_logger
+from tensorboardX import SummaryWriter
+import torchvision.utils as vutils
 
 import argparse
 
-
-
+writer = SummaryWriter("first_experiments")
 def main():
     # Hyper Parameters
     parser = argparse.ArgumentParser()
@@ -100,7 +101,7 @@ def main():
     print(opt)
 
     logging.basicConfig(format='%(asctime)s %(message)s', level=logging.INFO)
-    tb_logger.configure(opt.logger_name, flush_secs=5)
+    # tb_logger.configure(opt.logger_name, flush_secs=5)
 
     tokenizer, vocab_size = data.get_tokenizer(opt.vocab_path, opt.data_name)
     opt.vocab_size = vocab_size
@@ -212,6 +213,15 @@ def train(opt, train_loader, adapt_loader, model, model_ema, epoch, val_loader):
         consistency_loss_img = adapt_loss(ema_unlabel_img_emb, unlabel_img_emb)
         consistency_loss = consistency_loss_img * consistency_weight
 
+        if i % 100 == 0:
+            plot_img = vutils.make_grid(train_data[0],
+                            normalize=True, scale_each=True)
+            writer.add_image('Labeled Images', plot_img, model.Eiters)
+
+            plot_img = vutils.make_grid(unlabel_imgs,
+                            normalize=True, scale_each=True)
+            writer.add_image('Unlabeled Images', plot_img, model.Eiters)
+
         # measure accuracy and record loss
         model.optimizer.zero_grad()
         loss = model.forward_loss(img_emb, cap_emb)
@@ -232,9 +242,9 @@ def train(opt, train_loader, adapt_loader, model, model_ema, epoch, val_loader):
         batch_time.update(time.time() - end)
         end = time.time()
 
-        model.logger.update('Iter', model.Eiters)
-        model.logger.update('lr', model.optimizer.param_groups[0]['lr'])
-        model.logger.update('Adapt Loss', consistency_loss.item())
+        # model.logger.update('Iter', model.Eiters)
+        # model.logger.update('lr', model.optimizer.param_groups[0]['lr'])
+        # model.logger.update('Adapt Loss', consistency_loss.item())
 
         # Print log info
         if model.Eiters % opt.log_step == 0:
@@ -248,11 +258,11 @@ def train(opt, train_loader, adapt_loader, model, model_ema, epoch, val_loader):
                     data_time=data_time, e_log=str(model.logger)))
 
         # Record logs in tensorboard
-        tb_logger.log_value('epoch', epoch, step=model.Eiters)
-        tb_logger.log_value('step', i, step=model.Eiters)
-        tb_logger.log_value('batch_time', batch_time.val, step=model.Eiters)
-        tb_logger.log_value('data_time', data_time.val, step=model.Eiters)
-        model.logger.tb_log(tb_logger, step=model.Eiters)
+        # tb_logger.log_value('epoch', epoch, step=model.Eiters)
+        # tb_logger.log_value('step', i, step=model.Eiters)
+        # tb_logger.log_value('batch_time', batch_time.val, step=model.Eiters)
+        # tb_logger.log_value('data_time', data_time.val, step=model.Eiters)
+        # model.logger.tb_log(tb_logger, step=model.Eiters)
 
         # validate at every val_step
         if model.Eiters % opt.val_step == 0:
@@ -277,17 +287,17 @@ def validate(opt, val_loader, model):
     currscore = r1 + r5 + r10 + r1i + r5i + r10i
 
     # record metrics in tensorboard
-    tb_logger.log_value('r1', r1, step=model.Eiters)
-    tb_logger.log_value('r5', r5, step=model.Eiters)
-    tb_logger.log_value('r10', r10, step=model.Eiters)
-    tb_logger.log_value('medr', medr, step=model.Eiters)
-    tb_logger.log_value('meanr', meanr, step=model.Eiters)
-    tb_logger.log_value('r1i', r1i, step=model.Eiters)
-    tb_logger.log_value('r5i', r5i, step=model.Eiters)
-    tb_logger.log_value('r10i', r10i, step=model.Eiters)
-    tb_logger.log_value('medri', medri, step=model.Eiters)
-    tb_logger.log_value('meanr', meanr, step=model.Eiters)
-    tb_logger.log_value('rsum', currscore, step=model.Eiters)
+    # tb_logger.log_value('r1', r1, step=model.Eiters)
+    # tb_logger.log_value('r5', r5, step=model.Eiters)
+    # tb_logger.log_value('r10', r10, step=model.Eiters)
+    # tb_logger.log_value('medr', medr, step=model.Eiters)
+    # tb_logger.log_value('meanr', meanr, step=model.Eiters)
+    # tb_logger.log_value('r1i', r1i, step=model.Eiters)
+    # tb_logger.log_value('r5i', r5i, step=model.Eiters)
+    # tb_logger.log_value('r10i', r10i, step=model.Eiters)
+    # tb_logger.log_value('medri', medri, step=model.Eiters)
+    # tb_logger.log_value('meanr', meanr, step=model.Eiters)
+    # tb_logger.log_value('rsum', currscore, step=model.Eiters)
 
     return currscore
 
