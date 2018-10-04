@@ -64,11 +64,11 @@ class LogCollector(object):
             s += k + ' ' + str(v)
         return s
 
-    def tb_log(self, tb_logger, prefix='', step=None):
+    def tb_log(self, tb_logger, step=None, prefix='data/',):
         """Log using tensorboard
         """
-        for k, v in self.meters.items():
-            tb_logger.log_value(prefix + k, v.val, step=step)
+        for k, v in self.meters.items():              
+            tb_logger.add_scalar(prefix + k, v.val, step)
 
 
 def encode_data(model, data_loader, log_step=10, logging=print):

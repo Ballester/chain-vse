@@ -23,7 +23,7 @@ import torchvision.utils as vutils
 
 import argparse
 
-writer = SummaryWriter("first_experiments")
+
 def main():
     # Hyper Parameters
     parser = argparse.ArgumentParser()
@@ -33,7 +33,7 @@ def main():
                         help='resnet152_precomp')
     parser.add_argument('--vocab_path', default='char',
                         help='Path to saved vocabulary pickle files. Use char for character-based models.')
-    parser.add_argument('--margin', default=0.05, type=float,
+    parser.add_argument('--margin', default=0.2, type=float,
                         help='Rank loss margin.')
     parser.add_argument('--num_epochs', default=30, type=int,
                         help='Number of training epochs.')
@@ -51,17 +51,17 @@ def main():
                         help='Size of an image crop as the CNN input.')
     parser.add_argument('--num_layers', default=1, type=int,
                         help='Number of GRU layers.')
-    parser.add_argument('--learning_rate', default=.001, type=float,
+    parser.add_argument('--learning_rate', default=2e-4, type=float,
                         help='Initial learning rate.')
     parser.add_argument('--lr_update', default=15, type=int,
                         help='Number of epochs to update the learning rate.')
-    parser.add_argument('--workers', default=10, type=int,
+    parser.add_argument('--workers', default=4, type=int,
                         help='Number of data loader workers.')
     parser.add_argument('--log_step', default=10, type=int,
                         help='Number of steps to print and record the log.')
     parser.add_argument('--val_step', default=500, type=int,
                         help='Number of steps to run validation.')
-    parser.add_argument('--logger_name', default='runs/runX',
+    parser.add_argument('--logger_name', default='',
                         help='Path to save the model and Tensorboard log.')
     parser.add_argument('--resume', default='', type=str, metavar='PATH',
                         help='path to latest checkpoint (default: none)')
@@ -83,11 +83,17 @@ def main():
     parser.add_argument('--use_abs', action='store_true',
                         help='Take the absolute value of embedding vectors.')
     parser.add_argument('--no_imgnorm', action='store_true',
-                        help='Do not normalize the image embeddings.')
+                        help='Do not normalize the image embeddings.')    
     parser.add_argument('--text_encoder', default='GRU',
                         help='[GRU|Conv].')
+    parser.add_argument('--consistency_weight', type=float, default=20.,
+                        help='consistency weight (default: 20.).')
     parser.add_argument('--add_data', action='store_true',
                         help='Wheter to use additional unlabeled data.')
+    parser.add_argument('--log_images', action='store_true',
+                        help='Wheter to use log images in tensorboard.')
+    parser.add_argument('--noise', type=float, default=0.,
+                        help='Ammont of noise for augmenting embeddings.')
     parser.add_argument('--pool', default='max',
                         help='Type of pooling used for conv models.')
     parser.add_argument('--kwargs', type=str, nargs='+', default=None,
@@ -98,9 +104,22 @@ def main():
     if opt.test_measure is None:
         opt.test_measure = opt.measure
 
+    print('\n\n')
     print(opt)
+    
+    if opt.logger_name == '':
+        writer = SummaryWriter()
+        logpath = writer.file_writer.get_logdir()
+        opt.logger_name = logpath
+    else:
+        writer = SummaryWriter(opt.logger_name)
 
-    logging.basicConfig(format='%(asctime)s %(message)s', level=logging.INFO)
+    
+    print('')
+    print('')
+    print('Outpath: ', opt.logger_name)
+
+    logging.basicConfig(format='%(asctime)s %(message)s', level=logging.ERROR)
     # tb_logger.configure(opt.logger_name, flush_secs=5)
 
     tokenizer, vocab_size = data.get_tokenizer(opt.vocab_path, opt.data_name)
@@ -139,7 +158,7 @@ def main():
             model.Eiters = checkpoint['Eiters']
             print("=> loaded checkpoint '{}' (epoch {}, best_rsum {})"
                   .format(opt.resume, start_epoch, best_rsum))
-            validate(opt, val_loader, model)
+            validate(opt, val_loader, model, writer)
         else:
             print("=> no checkpoint found at '{}'".format(opt.resume))
 
@@ -150,10 +169,13 @@ def main():
         consistency_weight = get_current_consistency_weight(20.0, epoch, 100) # TODO 20.0 weight and 100 rampup hardcoded
 
         # train for one epoch
-        train(opt, train_loader, adapt_loader, model, model_ema, epoch, val_loader)
+        train(opt, train_loader, adapt_loader, model, model_ema, epoch, val_loader, tb_writer=writer)
 
         # evaluate on validation set
-        rsum = validate(opt, val_loader, model_ema)
+        # print('Valdiate Normal')
+        # rsum = validate(opt, val_loader, model_ema, writer)
+        print('Valdiate EMA')
+        rsum = validate(opt, val_loader, model, writer)
         # rsum_adapt = validate(opt, val_adapt_loader, model_ema)
 
         # remember best R@ sum and save checkpoint
@@ -169,25 +191,23 @@ def main():
         }, is_best, prefix=opt.logger_name + '/')
 
 
-def train(opt, train_loader, adapt_loader, model, model_ema, epoch, val_loader):
+def train(opt, train_loader, adapt_loader, model, model_ema, epoch, val_loader, tb_writer):
     # average meters to record the training statistics
     batch_time = AverageMeter()
     data_time = AverageMeter()
     train_logger = LogCollector()
-
-
-
+    
     end = time.time()
     adapt_iter = iter(adapt_loader)
     adapt_loss = torch.nn.MSELoss()
 
-    consistency_weight = 20.
+    consistency_weight = opt.consistency_weight
 
     for i, train_data in enumerate(train_loader): # TODO different data augmentation
         # measure data loading time
         data_time.update(time.time() - end)
         model.Eiters += 1
-
+        
         # switch to train mode
         model.train_start()
         model_ema.train_start()
@@ -200,37 +220,39 @@ def train(opt, train_loader, adapt_loader, model, model_ema, epoch, val_loader):
         except:
             adapt_iter = iter(adapt_loader)
             adapt_data = next(adapt_iter)
-
+        
         unlabel_imgs, unlabel_imgs_ema, _, _ = adapt_data
+        unlabel_imgs = unlabel_imgs.float().cuda()
+        unlabel_imgs_ema = unlabel_imgs_ema.float().cuda()
         # Update the model
-        img_emb, cap_emb = model.run_emb(*train_data)
-
+        img_emb, cap_emb = model.run_emb(*train_data)        
         with torch.no_grad():
             ema_unlabel_img_emb = model_ema.img_enc(unlabel_imgs_ema)
 
-        unlabel_img_emb = model.img_enc(unlabel_imgs)
+        unlabel_img_emb = model.img_enc(unlabel_imgs)        
 
         consistency_loss_img = adapt_loss(ema_unlabel_img_emb, unlabel_img_emb)
         consistency_loss = consistency_loss_img * consistency_weight
 
-        if i % 100 == 0:
+        if i % 100 == 0 and opt.log_images:
             plot_img = vutils.make_grid(train_data[0],
                             normalize=True, scale_each=True)
-            writer.add_image('Labeled Images', plot_img, model.Eiters)
+            tb_writer.add_image('Labeled Images', plot_img, model.Eiters)
 
             plot_img = vutils.make_grid(unlabel_imgs,
                             normalize=True, scale_each=True)
-            writer.add_image('Unlabeled Images', plot_img, model.Eiters)
+            tb_writer.add_image('Unlabeled Images', plot_img, model.Eiters)
 
         # measure accuracy and record loss
         model.optimizer.zero_grad()
-        loss = model.forward_loss(img_emb, cap_emb)
+        loss = model.forward_loss(img_emb, cap_emb)         
         total_loss = loss + consistency_loss
 
         # compute gradient and do SGD step
         total_loss.backward()
         if model.grad_clip > 0:
             clip_grad_norm(model.params, model.grad_clip)
+
         model.optimizer.step()
 
         update_ema_variables(model=model,
@@ -242,13 +264,16 @@ def train(opt, train_loader, adapt_loader, model, model_ema, epoch, val_loader):
         batch_time.update(time.time() - end)
         end = time.time()
 
-        # model.logger.update('Iter', model.Eiters)
-        # model.logger.update('lr', model.optimizer.param_groups[0]['lr'])
-        # model.logger.update('Adapt Loss', consistency_loss.item())
+        tb_writer.add_scalar('Iter', model.Eiters, model.Eiters)
+        tb_writer.add_scalar('lr', model.optimizer.param_groups[0]['lr'], model.Eiters)
 
-        # Print log info
-        if model.Eiters % opt.log_step == 0:
-            logging.info(
+        model.logger.update('Contr Loss', loss.item(), )
+        model.logger.update('Adapt Loss', consistency_loss.item(), )
+        model.logger.update('Total Loss', total_loss.item(), )
+
+        # Print log info        
+        if model.Eiters % opt.log_step == 0:            
+            print(
                 'Epoch: [{0}][{1}/{2}]\t'
                 '{e_log}\t'
                 'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
@@ -256,48 +281,55 @@ def train(opt, train_loader, adapt_loader, model, model_ema, epoch, val_loader):
                 .format(
                     epoch, i, len(train_loader), batch_time=batch_time,
                     data_time=data_time, e_log=str(model.logger)))
+            # print(model.logger)
+            pass
 
         # Record logs in tensorboard
-        # tb_logger.log_value('epoch', epoch, step=model.Eiters)
-        # tb_logger.log_value('step', i, step=model.Eiters)
-        # tb_logger.log_value('batch_time', batch_time.val, step=model.Eiters)
-        # tb_logger.log_value('data_time', data_time.val, step=model.Eiters)
-        # model.logger.tb_log(tb_logger, step=model.Eiters)
+        tb_writer.add_scalar('epoch', epoch, model.Eiters)
+        tb_writer.add_scalar('step', i, model.Eiters)
+        tb_writer.add_scalar('batch_time', batch_time.val, model.Eiters)
+        tb_writer.add_scalar('data_time', data_time.val, model.Eiters)
+
+        model.logger.tb_log(tb_writer,  model.Eiters)
 
         # validate at every val_step
         if model.Eiters % opt.val_step == 0:
-            validate(opt, val_loader, model_ema)
+            # print('Validate normal')
+            # validate(opt, val_loader, model_ema, tb_writer)
+            print('Validate EMA')
+            validate(opt, val_loader, model, tb_writer)
 
 
-def validate(opt, val_loader, model):
+def validate(opt, val_loader, model, tb_writer):
     # compute the encoding for all the validation images and captions
+    # with torch.no_grad():
     img_embs, cap_embs = encode_data(
         model, val_loader, opt.log_step, logging.info)
 
     # caption retrieval
     (r1, r5, r10, medr, meanr) = i2t(img_embs, cap_embs, measure=opt.test_measure)
-    logging.info("Image to text: %.1f, %.1f, %.1f, %.1f, %.1f" %
+    print("Image to text: %.1f, %.1f, %.1f, %.1f, %.1f" %
                  (r1, r5, r10, medr, meanr))
     # image retrieval
     (r1i, r5i, r10i, medri, meanr) = t2i(
         img_embs, cap_embs, measure=opt.test_measure)
-    logging.info("Text to image: %.1f, %.1f, %.1f, %.1f, %.1f" %
+    print("Text to image: %.1f, %.1f, %.1f, %.1f, %.1f" %
                  (r1i, r5i, r10i, medri, meanr))
     # sum of recalls to be used for early stopping
     currscore = r1 + r5 + r10 + r1i + r5i + r10i
 
     # record metrics in tensorboard
-    # tb_logger.log_value('r1', r1, step=model.Eiters)
-    # tb_logger.log_value('r5', r5, step=model.Eiters)
-    # tb_logger.log_value('r10', r10, step=model.Eiters)
-    # tb_logger.log_value('medr', medr, step=model.Eiters)
-    # tb_logger.log_value('meanr', meanr, step=model.Eiters)
-    # tb_logger.log_value('r1i', r1i, step=model.Eiters)
-    # tb_logger.log_value('r5i', r5i, step=model.Eiters)
-    # tb_logger.log_value('r10i', r10i, step=model.Eiters)
-    # tb_logger.log_value('medri', medri, step=model.Eiters)
-    # tb_logger.log_value('meanr', meanr, step=model.Eiters)
-    # tb_logger.log_value('rsum', currscore, step=model.Eiters)
+    tb_writer.add_scalar('data/r1', r1, model.Eiters)
+    tb_writer.add_scalar('data/r5', r5, model.Eiters)
+    tb_writer.add_scalar('data/r10', r10, model.Eiters)
+    tb_writer.add_scalar('data/medr', medr, model.Eiters)
+    tb_writer.add_scalar('data/meanr', meanr, model.Eiters)
+    tb_writer.add_scalar('data/r1i', r1i, model.Eiters)
+    tb_writer.add_scalar('data/r5i', r5i, model.Eiters)
+    tb_writer.add_scalar('data/r10i', r10i, model.Eiters)
+    tb_writer.add_scalar('data/medri', medri, model.Eiters)
+    tb_writer.add_scalar('data/meanr', meanr, model.Eiters)
+    tb_writer.add_scalar('data/rsum', currscore, model.Eiters)
 
     return currscore
 
@@ -306,29 +338,6 @@ def save_checkpoint(state, is_best, filename='checkpoint.pth.tar', prefix=''):
     torch.save(state, prefix + filename)
     if is_best:
         shutil.copyfile(prefix + filename, prefix + 'model_best.pth.tar')
-
-
-def save_histograms(model, logger_name, curr_iter):
-    print('saving histograms')
-    from matplotlib import pyplot as plt
-    plt.switch_backend('agg')
-
-    hist_folder = '/'.join([logger_name, 'histograms'])
-    if not os.path.exists(hist_folder):
-        os.makedirs(hist_folder)
-
-    filename = '{}/{:07d}.pdf'.format(hist_folder, curr_iter)
-
-    encoder = model.txt_enc
-    n_layers = len(encoder.outputs)
-    fig, ax = plt.subplots(n_layers, figsize=(10, 4*n_layers))
-    for z, (l_name, l_cont) in enumerate(sorted(encoder.outputs.items())):
-    #     curr_axis = ax[z%3, z%4]
-        curr_axis = ax[z]
-        curr_axis.set_title('{}/{}'.format(l_name, l_cont.size()))
-        _ = curr_axis.hist(l_cont.data.cpu().numpy().flatten(), bins=100)
-
-    plt.savefig(filename)
 
 
 def adjust_learning_rate(opt, optimizer, epoch):
@@ -360,7 +369,7 @@ def get_current_consistency_weight(weight, epoch, rampup):
     return weight * sigmoid_rampup(epoch, rampup)
 
 def update_ema_variables(model, ema_model, alpha, global_step):
-    alpha = min(1 - 1 / (global_step + 1), alpha)
+    alpha = min(1 - 1 / (global_step + 1), alpha)    
     for ema_param, param in zip(ema_model.get_params(), model.get_params()):
         ema_param.data.mul_(alpha).add_(1 - alpha, param.data)
 

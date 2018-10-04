@@ -213,6 +213,38 @@ class FlickrDataset(data.Dataset):
         return len(self.ids)
 
 
+class AddNoise(torch.nn.Module):
+    def __init__(self, mean=0.0, stddev=0.1):
+        super(AddNoise, self).__init__()
+        self.mean = mean
+        self.stddev = stddev
+
+    def forward(self, input):
+        noise = input.clone().normal_(self.mean, self.stddev)
+        return input + noise
+
+
+class UnlabeledPrecompDataset(data.Dataset):
+
+    def __init__(self, data_path, sigma=0.1):
+        self.features = np.load(os.path.join(data_path, 'unlabeled_ims.npy'))
+        self.n = len(self.features)
+        print(self.features.shape)        
+        print('Loaded {} unlabeled image features'.format(self.n))
+        self.sigma = sigma   
+    
+    def __len__(self,):
+        return self.n
+    
+    def __getitem__(self, idx):
+        feat_tensor = torch.FloatTensor(self.features[idx])        
+        # noise = feat_tensor.clone().normal_(0., self.sigma)        
+
+        # feat_tensor_ema = feat_tensor + noise
+        feat_tensor_ema = feat_tensor
+        return feat_tensor, feat_tensor_ema, idx, 1
+        
+
 class PrecompDataset(data.Dataset):
     """
     Load precomputed captions and image features
@@ -241,42 +273,7 @@ class PrecompDataset(data.Dataset):
             self.im_div = 1
         # the development set for coco is large and so validation would be slow
         if data_split == 'dev':
-            self.length = 5000
-
-        # self.__sort_by_length__(False, 500)
-
-    def __sort_by_length__(self, reverse=True, limit=None):
-
-        captions = np.asarray(self.captions)
-        length = len(captions)
-        grouped_caps = []
-        len_sum = []
-        for i in range(length/5):
-            grouped_caps.append(captions[(i*5):(i+1)*5])
-            lens = np.sum(map(len, grouped_caps[-1]))
-            len_sum.append(lens)
-
-        argsort = np.argsort(len_sum)
-
-        if reverse:
-            argsort = argsort[::-1]
-
-        self.ids = argsort
-
-        grouped_caps = np.asarray(grouped_caps)
-        grouped_ = grouped_caps[argsort]
-        flatten = lambda l: [item for sublist in l for item in sublist]
-
-        grouped_ = flatten(grouped_)
-
-        self.captions = grouped_
-        self.images   = self.images[argsort]
-
-        if limit:
-            self.captions = self.captions[:limit]
-            self.images   = self.images[:limit/self.im_div]
-            self.length = limit
-
+            self.length = 5000        
 
     def __getitem__(self, index):
         # handle the image redundancy
@@ -321,61 +318,6 @@ def collate_fn(data):
         targets[i, :end] = cap[:end]
 
     return images, targets, lengths, ids
-
-
-
-def split_array(iterable, splitters=[0, 1, 2, 3]):
-    import itertools
-    return [torch.LongTensor(list(g))
-            for k, g in itertools.groupby(iterable,
-                 lambda x: x in splitters)
-                 if not k]
-
-
-def collate_fn_partial(data):
-    """Build mini-batch tensors from a list of (image, caption) tuples.
-    Args:
-        data: list of (image, caption) tuple.
-            - image: torch tensor of shape (3, 256, 256).
-            - caption: torch tensor of shape (?); variable length.
-
-    Returns:
-        images: torch tensor of shape (batch_size, 3, 256, 256).
-        targets: torch tensor of shape (batch_size, padded_length).
-        lengths: list; valid length for each padded caption.
-    """
-    flatten = lambda l: [item for sublist in l for item in sublist]
-
-    # Sort a data list by caption length
-    data.sort(key=lambda x: len(x[1]), reverse=True)
-    images, captions, ids, img_ids = zip(*data)
-
-    splitted_caps = []
-    for caption in captions:
-        sc = split_array(caption)
-        splitted_caps.append(sc)
-
-    sent_lens = map(len, splitted_caps)
-
-    data = sorted(zip(images, captions, ids, img_ids, splitted_caps, sent_lens),
-                        key=lambda z: z[-1], reverse=True)
-
-    images, captions, ids, img_ids, splitted_caps, sent_lens = zip(*data)
-
-    all_words = flatten(splitted_caps)
-    word_lens = map(len, all_words)
-
-    # Merge images (convert tuple of 3D tensor to 4D tensor)
-    images = torch.stack(images, 0)
-
-    targets = torch.zeros(len(captions), max(sent_lens), max(word_lens)).long()
-    for i, cap in enumerate(splitted_caps):
-        end_sentence = sent_lens[i]
-        for j, word in enumerate(cap):
-            end_word = len(word)
-            targets[i, j, :end_word] = word[:end_word]
-
-    return images, targets, sent_lens, ids
 
 
 def get_loader_single(data_name, split, root, json, tokenizer, transform,
@@ -450,8 +392,10 @@ def get_transform(data_name, split_name, opt):
 
 
 def get_loaders(data_name, tokenizer, crop_size, batch_size, workers, opt, collate_fn_str='collate_fn'):
+    
     dpath = os.path.join(opt.data_path, data_name)
     cfn = eval(collate_fn_str)
+
     if opt.data_name.endswith('_precomp'):
         train_loader = get_precomp_loader(dpath, 'train', tokenizer, opt,
                                           batch_size, True, workers, cfn)
@@ -459,6 +403,15 @@ def get_loaders(data_name, tokenizer, crop_size, batch_size, workers, opt, colla
         val_loader = get_precomp_loader(dpath, 'dev', tokenizer, opt,
                                         batch_size, False, workers,
                                         cfn)
+        if opt.add_data:
+            adapt_dataset = UnlabeledPrecompDataset(dpath)
+
+            adapt_loader = torch.utils.data.DataLoader(dataset=adapt_dataset,
+                                            batch_size=batch_size,
+                                            shuffle=True,
+                                            pin_memory=True)
+            return (train_loader, adapt_loader), val_loader
+
     else:
         # Build Dataset Loader
         roots, ids = get_paths(dpath, data_name, opt.use_restval)
