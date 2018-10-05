@@ -213,17 +213,6 @@ class FlickrDataset(data.Dataset):
         return len(self.ids)
 
 
-class AddNoise(torch.nn.Module):
-    def __init__(self, mean=0.0, stddev=0.1):
-        super(AddNoise, self).__init__()
-        self.mean = mean
-        self.stddev = stddev
-
-    def forward(self, input):
-        noise = input.clone().normal_(self.mean, self.stddev)
-        return input + noise
-
-
 class UnlabeledPrecompDataset(data.Dataset):
 
     def __init__(self, data_path, sigma=0.1):
@@ -238,10 +227,10 @@ class UnlabeledPrecompDataset(data.Dataset):
     
     def __getitem__(self, idx):
         feat_tensor = torch.FloatTensor(self.features[idx])        
-        # noise = feat_tensor.clone().normal_(0., self.sigma)        
+        noise = feat_tensor.clone().normal_(0., self.sigma)        
 
-        # feat_tensor_ema = feat_tensor + noise
-        feat_tensor_ema = feat_tensor
+        feat_tensor_ema = feat_tensor + noise
+        # feat_tensor_ema = feat_tensor
         return feat_tensor, feat_tensor_ema, idx, 1
         
 
@@ -404,7 +393,7 @@ def get_loaders(data_name, tokenizer, crop_size, batch_size, workers, opt, colla
                                         batch_size, False, workers,
                                         cfn)
         if opt.add_data:
-            adapt_dataset = UnlabeledPrecompDataset(dpath)
+            adapt_dataset = UnlabeledPrecompDataset(dpath, sigma=opt.noise)
 
             adapt_loader = torch.utils.data.DataLoader(dataset=adapt_dataset,
                                             batch_size=batch_size,
