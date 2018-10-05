@@ -83,11 +83,9 @@ def main():
     parser.add_argument('--use_abs', action='store_true',
                         help='Take the absolute value of embedding vectors.')
     parser.add_argument('--no_imgnorm', action='store_true',
-                        help='Do not normalize the image embeddings.')    
+                        help='Do not normalize the image embeddings.')
     parser.add_argument('--text_encoder', default='GRU',
                         help='[GRU|Conv].')
-    parser.add_argument('--consistency_weight', type=float, default=20.,
-                        help='consistency weight (default: 20.).')
     parser.add_argument('--add_data', action='store_true',
                         help='Wheter to use additional unlabeled data.')
     parser.add_argument('--log_images', action='store_true',
@@ -98,6 +96,24 @@ def main():
                         help='Type of pooling used for conv models.')
     parser.add_argument('--kwargs', type=str, nargs='+', default=None,
                         help='Additional args for the model. Usage: argument:type:value ')
+    ### Mean-teacher hyperparameters ###
+    parser.add_argument('--ramp_lr', action='store_true',
+                        help='Use the learning rate schedule from mean-teacher')
+    parser.add_argument('--initial_lr', type=float, default=0.0006,
+                        help='Initial learning_rate for rampup')
+    parser.add_argument('--initial_lr_rampup', type=int, default=50,
+                        help='Epoch for lr rampup')
+    parser.add_argument('--consistency_weight', type=float, default=20.,
+                        help='consistency weight (default: 20.).')
+    parser.add_argument('--consistency_alpha', type=float, default=0.99,
+                        help='Consistency alpha before ema_late_epoch')
+    parser.add_argument('--consistency_alpha_late', type=float, default=0.999,
+                        help='Consistency alpha after ema_late_epoch')
+    parser.add_argument('--consistency_rampup', type=int, default=100,
+                        help='Consistency rampup epoch')
+    parser.add_argument('--ema_late_epoch', type=int, default=50,
+                        help='When to change alpha variable for consistency weight')
+
 
     opt = parser.parse_args()
 
@@ -106,7 +122,7 @@ def main():
 
     print('\n\n')
     print(opt)
-    
+
     if opt.logger_name == '':
         writer = SummaryWriter()
         logpath = writer.file_writer.get_logdir()
@@ -114,7 +130,7 @@ def main():
     else:
         writer = SummaryWriter(opt.logger_name)
 
-    
+
     print('')
     print('')
     print('Outpath: ', opt.logger_name)
@@ -165,8 +181,6 @@ def main():
     # Train the Model
     best_rsum = 0
     for epoch in range(opt.num_epochs):
-        adjust_learning_rate(opt, model.optimizer, epoch) # TODO use mean-teacher learning rate
-        consistency_weight = get_current_consistency_weight(20.0, epoch, 100) # TODO 20.0 weight and 100 rampup hardcoded
 
         # train for one epoch
         train(opt, train_loader, adapt_loader, model, model_ema, epoch, val_loader, tb_writer=writer)
@@ -196,18 +210,25 @@ def train(opt, train_loader, adapt_loader, model, model_ema, epoch, val_loader, 
     batch_time = AverageMeter()
     data_time = AverageMeter()
     train_logger = LogCollector()
-    
+
     end = time.time()
     adapt_iter = iter(adapt_loader)
     adapt_loss = torch.nn.MSELoss()
 
-    consistency_weight = opt.consistency_weight
+    if opt.ramp_lr:
+        adjust_learning_rate_mean_teacher(model.optimizer, epoch, opt.num_epochs,
+                                          opt.initial_lr_rampup, opt.initial_lr)
+    else:
+        adjust_learning_rate(opt, model.optimizer, epoch) # TODO use mean-teacher learning rate
+
+    consistency_weight = get_current_consistency_weight(opt.consistency_weight,
+                                                        epoch, opt.consistency_rampup)
 
     for i, train_data in enumerate(train_loader): # TODO different data augmentation
         # measure data loading time
         data_time.update(time.time() - end)
         model.Eiters += 1
-        
+
         # switch to train mode
         model.train_start()
         model_ema.train_start()
@@ -220,16 +241,16 @@ def train(opt, train_loader, adapt_loader, model, model_ema, epoch, val_loader, 
         except:
             adapt_iter = iter(adapt_loader)
             adapt_data = next(adapt_iter)
-        
+
         unlabel_imgs, unlabel_imgs_ema, _, _ = adapt_data
         unlabel_imgs = unlabel_imgs.float().cuda()
         unlabel_imgs_ema = unlabel_imgs_ema.float().cuda()
         # Update the model
-        img_emb, cap_emb = model.run_emb(*train_data)        
+        img_emb, cap_emb = model.run_emb(*train_data)
         with torch.no_grad():
             ema_unlabel_img_emb = model_ema.img_enc(unlabel_imgs_ema)
 
-        unlabel_img_emb = model.img_enc(unlabel_imgs)        
+        unlabel_img_emb = model.img_enc(unlabel_imgs)
 
         consistency_loss_img = adapt_loss(ema_unlabel_img_emb, unlabel_img_emb)
         consistency_loss = consistency_loss_img * consistency_weight
@@ -245,7 +266,7 @@ def train(opt, train_loader, adapt_loader, model, model_ema, epoch, val_loader, 
 
         # measure accuracy and record loss
         model.optimizer.zero_grad()
-        loss = model.forward_loss(img_emb, cap_emb)         
+        loss = model.forward_loss(img_emb, cap_emb)
         total_loss = loss + consistency_loss
 
         # compute gradient and do SGD step
@@ -255,10 +276,16 @@ def train(opt, train_loader, adapt_loader, model, model_ema, epoch, val_loader, 
 
         model.optimizer.step()
 
-        update_ema_variables(model=model,
-                             ema_model=model_ema,
-                             alpha=0.99,  # TODO: adjust alpha
-                             global_step=model.Eiters)
+        if epoch <= opt.ema_late_epoch:
+            update_ema_variables(model=model,
+                                 ema_model=model_ema,
+                                 alpha=opt.consistency_alpha,
+                                 global_step=model.Eiters)
+        else:
+            update_ema_variables(model=model,
+                                 ema_model=model_ema,
+                                 alpha=opt.consistency_alpha_late,
+                                 global_step=model.Eiters)
 
         # measure elapsed time
         batch_time.update(time.time() - end)
@@ -271,8 +298,8 @@ def train(opt, train_loader, adapt_loader, model, model_ema, epoch, val_loader, 
         model.logger.update('Adapt Loss', consistency_loss.item(), )
         model.logger.update('Total Loss', total_loss.item(), )
 
-        # Print log info        
-        if model.Eiters % opt.log_step == 0:            
+        # Print log info
+        if model.Eiters % opt.log_step == 0:
             print(
                 'Epoch: [{0}][{1}/{2}]\t'
                 '{e_log}\t'
@@ -369,22 +396,25 @@ def get_current_consistency_weight(weight, epoch, rampup):
     return weight * sigmoid_rampup(epoch, rampup)
 
 def update_ema_variables(model, ema_model, alpha, global_step):
-    alpha = min(1 - 1 / (global_step + 1), alpha)    
+    alpha = min(1 - 1 / (global_step + 1), alpha)
     for ema_param, param in zip(ema_model.get_params(), model.get_params()):
         ema_param.data.mul_(alpha).add_(1 - alpha, param.data)
 
-def adjust_learning_rate_mean_teacher(optimizer, epoch, step_in_epoch,
-                                      total_steps_in_epoch, initial_lr, rampup_begin):
-    lr = initial_lr
-    epoch = epoch + step_in_epoch / total_steps_in_epoch
-
-    # LR warm-up to handle large minibatch sizes from https://arxiv.org/abs/1706.02677
-    lr = linear_rampup(epoch, 15) * (initial_lr - rampup_begin) + rampup_begin
+def adjust_learning_rate_mean_teacher(optimizer, epoch, num_epochs,
+                                      initial_lr_rampup, initial_lr):
+    if initial_lr_rampup > 0:
+        if epoch <= initial_lr_rampup:
+            lr = initial_lr * sigmoid_rampup(epoch, initial_lr_rampup)
+        else:
+            lr = cosine_lr(epoch-initial_lr_rampup,
+                           num_epochs-initial_lr_rampup,
+                           initial_lr)
+    else:
+        lr = cosine_lr(epoch, num_epochs, initial_lr)
 
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
 
-    return lr
 
 def linear_rampup(current, rampup_length):
     """Linear rampup"""
@@ -402,6 +432,8 @@ def sigmoid_rampup(current, rampup_length):
         phase = 1.0 - current / rampup_length
         return float(np.exp(-5.0 * phase * phase))
 
+def cosine_lr(current_epoch, num_epochs, initial_lr):
+    return initial_lr * cosine_rampdown(current_epoch, num_epochs)
 
 def cosine_rampdown(current, rampdown_length):
     """Cosine rampdown from https://arxiv.org/abs/1608.03983"""
