@@ -226,10 +226,13 @@ class UnlabeledPrecompDataset(data.Dataset):
         return self.n
     
     def __getitem__(self, idx):
-        feat_tensor = torch.FloatTensor(self.features[idx])        
-        noise = feat_tensor.clone().normal_(0., self.sigma)        
+        feat_tensor = torch.FloatTensor(self.features[idx]) 
 
-        feat_tensor_ema = feat_tensor + noise
+        noise = feat_tensor.clone().normal_(0., self.sigma)
+        noise_ema = feat_tensor.clone().normal_(0., self.sigma)
+
+        feat_tensor = feat_tensor + noise
+        feat_tensor_ema = feat_tensor + noise_ema        
         # feat_tensor_ema = feat_tensor
         return feat_tensor, feat_tensor_ema, idx, 1
         
