@@ -55,6 +55,8 @@ def main():
                         help='Initial learning rate.')
     parser.add_argument('--lr_update', default=15, type=int,
                         help='Number of epochs to update the learning rate.')
+    parser.add_argument('--lr_decay', default=0.1, type=float,
+                        help='Learnin rate dacay ratio (0.1 reduces lr in 10x).')
     parser.add_argument('--workers', default=4, type=int,
                         help='Number of data loader workers.')
     parser.add_argument('--log_step', default=10, type=int,
@@ -219,11 +221,11 @@ def train(opt, train_loader, adapt_loader, model, model_ema, epoch, val_loader, 
         adjust_learning_rate_mean_teacher(model.optimizer, epoch, opt.num_epochs,
                                           opt.initial_lr_rampup, opt.initial_lr)
     else:
-        adjust_learning_rate(opt, model.optimizer, epoch) # TODO use mean-teacher learning rate
+        adjust_learning_rate(opt, model.optimizer, epoch)
 
     consistency_weight = get_current_consistency_weight(opt.consistency_weight,
                                                         epoch, opt.consistency_rampup)
-
+    
     for i, train_data in enumerate(train_loader): # TODO different data augmentation
         # measure data loading time
         data_time.update(time.time() - end)
@@ -292,8 +294,9 @@ def train(opt, train_loader, adapt_loader, model, model_ema, epoch, val_loader, 
         end = time.time()
 
         tb_writer.add_scalar('Iter', model.Eiters, model.Eiters)
-        tb_writer.add_scalar('lr', model.optimizer.param_groups[0]['lr'], model.Eiters)
-
+        tb_writer.add_scalar('Lr', model.optimizer.param_groups[0]['lr'], model.Eiters)
+        tb_writer.add_scalar('Consistency weight', consistency_weight, model.Eiters)
+        
         model.logger.update('Contr Loss', loss.item(), )
         model.logger.update('Adapt Loss', consistency_loss.item(), )
         model.logger.update('Total Loss', total_loss.item(), )
@@ -370,7 +373,7 @@ def save_checkpoint(state, is_best, filename='checkpoint.pth.tar', prefix=''):
 def adjust_learning_rate(opt, optimizer, epoch):
     """Sets the learning rate to the initial LR
        decayed by 10 every 30 epochs"""
-    lr = opt.learning_rate * (0.1 ** (epoch // opt.lr_update))
+    lr = opt.learning_rate * (opt.lr_decay ** (epoch // opt.lr_update))
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
 
