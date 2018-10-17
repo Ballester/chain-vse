@@ -298,6 +298,11 @@ class VSE(object):
                                     use_abs=opt.use_abs,
                                     no_imgnorm=opt.no_imgnorm)
 
+        # if 'text_encoder' not in opt:
+        #     opt.text_encoder = 'gru'
+        #     opt.kwargs = {}
+        #     opt.test_measure = None
+
         self.txt_enc = get_text_encoder(opt.text_encoder, opt)
 
         if torch.cuda.is_available():

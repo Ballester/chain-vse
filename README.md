@@ -15,7 +15,8 @@ Overview:
 
 ` TODO: update scripts `
 
-* Baseline models: `sh scripts/run.sh`
+* Default models: `sh scripts/run.sh`
+* Baseline models: `sh scripts/run_baseline.sh`
 * Precomp Features: `sh scripts/run_precomp.sh`
 * Precomp + DA: `sh scripts/run_precomp_da.sh`
 
@@ -25,12 +26,12 @@ Overview:
 
 Results achieved using this repository (COCO-1k test set) using pre-computed features (note that we do not finetune the network in this experiment): 
 
-| Method    | Features | R@1 | R@10| R@1 | R@10 |
-| :-------: | :----: | :-------: | :-------: | :-------: | :-------: |
-| RFF-net  [baseline@ICCV"17] | ResNet152 |  56.40 |  91.50 | 43.90 |  88.60 |
-| `chain-v1`  (p=1, d=1024) | `resnet152_precomp` |  57.80 | 95.60 | 44.18 | 90.66 |
-| `chain-v1`  (p=1, d=2048) | `resnet152_precomp` |  59.90 | 94.80 | 45.08 | 90.54 |
-| `chain-v1`  (p=1, d=8192) | `resnet152_precomp` |  61.20 | 95.80 | 46.60 | 90.92 |
+### Flickr30k 
+| Method      | TrainSet    | AdaptSet  | R@1     | R@10    | R@1     | R@10    | Settings   | 
+| :-------:   | :----:      | :-----:   | :-----: | :-----: | :-----: | :-----: | :-----:    | 
+| VSEPP       | `flickr`    |    -      |  46.8  |  84.0  | 33.9    |  73.1  |                      |
+| VSE+EMA     | `flickr`    |    -      |  45.0  |  83.5  | 31.9    |  72.2   | `run_baseline.sh #1` |
+| VSE+EMA     | `coco`      | `flickr`  |  56.4  |  91.5  | 43.90   |  88.60  | `run_baseline.sh #1` |
 
 
 ## <a name="start"></a> Getting Started

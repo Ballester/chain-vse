@@ -121,7 +121,10 @@ def encode_data(model, data_loader, log_step=10, logging=print):
     return img_embs, cap_embs
 
 
-def evalrank(model_path, data_path=None, split='dev', fold5=False, test_measure=None, log_step=10000):
+def evalrank(
+        model_path, data_path=None, split='dev', 
+        fold5=False, test_measure=None, log_step=10000
+    ):
     """
     Evaluate a trained model on either dev or test. If `fold5=True`, 5 fold
     cross-validation is done (only for MSCOCO). Otherwise, the full data is

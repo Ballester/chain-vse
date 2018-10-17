@@ -261,6 +261,7 @@ class PrecompDataset(data.Dataset):
 
     def __init__(self, data_path, data_split, 
                 tokenizer, sigma=0.01, adapt_set=False):
+        self.split = data_split
         self.data_path = data_path
         self.tokenizer = tokenizer
         self.adapt_set = adapt_set
@@ -281,9 +282,10 @@ class PrecompDataset(data.Dataset):
         # rkiros data has redundancy in images
         # we divide by 5, 10crop doesn't
         if self.images.shape[0] != self.length:
-            self.im_div = 5
+            self.im_div = 5            
         else:
             self.im_div = 1
+            print(self.images.shape[0]//5)
 
         # the development set for coco is large and so validation would be slow
         if data_split == 'val':
