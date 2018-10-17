@@ -17,7 +17,6 @@ from evaluation import LogCollector
 from evaluation import encode_data
 
 import logging
-import tensorboard_logger as tb_logger
 from tensorboardX import SummaryWriter
 import torchvision.utils as vutils
 
@@ -29,8 +28,24 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--data_path', default='/A/VSE/data/',
                         help='path to datasets')
-    parser.add_argument('--data_name', default='resnet152_precomp',
-                        help='resnet152_precomp')
+    parser.add_argument('--data_name', default='10resnet152_precomp',
+                        help='data name for the training set')    
+    
+    parser.add_argument('--adapt_data', default='10resnet152_precomp',
+                        help='data name for loading the adapt set ')
+    parser.add_argument('--adapt_split', default='val',
+                        help='split for performing domain adapt',
+                        choices=['train', 'val', 'test', 'unlabeled'])
+    parser.add_argument('--adapt_batch_size', default=128, type=int,
+                        help='Adapt set mini-batch size.')
+
+    parser.add_argument('--val_data', default='10resnet152_precomp',
+                        help='data name for loading the val set')
+    parser.add_argument('--val_split', default='10resnet152_precomp',
+                        help='data name for loading the val set')
+    parser.add_argument('--val_batch_size', default=128, type=int,
+                        help='Validation mini-batch size.')
+
     parser.add_argument('--vocab_path', default='char',
                         help='Path to saved vocabulary pickle files. Use char for character-based models.')
     parser.add_argument('--margin', default=0.2, type=float,
@@ -140,17 +155,52 @@ def main():
     logging.basicConfig(format='%(asctime)s %(message)s', level=logging.ERROR)
     # tb_logger.configure(opt.logger_name, flush_secs=5)
 
-    tokenizer, vocab_size = data.get_tokenizer(opt.vocab_path, opt.data_name)
+    tokenizer, vocab_size = data.get_tokenizer(
+        opt.vocab_path, opt.data_name
+    )
     opt.vocab_size = vocab_size
+    
+    train_loader = data.get_loader(
+        split='train', 
+        data_name=opt.data_name, 
+        batch_size=opt.batch_size, 
+        tokenizer=tokenizer, 
+        crop_size=opt.crop_size, 
+        workers=opt.workers, 
+        opt=opt,
+        adapt_set=False,
+    )
 
-    collate_fn = 'collate_fn'
-    if opt.text_encoder.startswith('partial'):
-        collate_fn = 'collate_fn_partial'
-    # Load data loaders
-    train_loader, val_loader = data.get_loaders(
-        opt.data_name, tokenizer, opt.crop_size, opt.batch_size, opt.workers, opt, collate_fn)
+    val_loader = data.get_loader(        
+        data_name=opt.val_data, 
+        split=opt.val_split,
+        batch_size=opt.val_batch_size, 
+        tokenizer=tokenizer, 
+        crop_size=opt.crop_size, 
+        workers=opt.workers, 
+        opt=opt,        
+        adapt_set=False,
+    )
+
     if opt.add_data:
-        train_loader, adapt_loader = train_loader
+        adapt_loader = data.get_loader(
+            split=opt.adapt_split,
+            data_name=opt.adapt_data, 
+            batch_size=opt.adapt_batch_size, 
+            tokenizer=tokenizer, 
+            crop_size=opt.crop_size,             
+            workers=opt.workers, 
+            opt=opt,
+            adapt_set=True,
+        )
+    
+    print('Train loader/dataset')
+    print(train_loader.dataset.data_path, train_loader.dataset.split)
+    print('Valid loader/dataset')
+    print(val_loader.dataset.data_path, val_loader.dataset.split)
+    print('Adapt loader/dataset')
+    print(adapt_loader.dataset.data_path, adapt_loader.dataset.split)
+        
     # adapt_loader, val_adapt_loader = data.get_loaders(
     #     opt.data_name, tokenizer, opt.crop_size, opt.batch_size, opt.workers, opt, collate_fn) # TODO set correct dataset
 
@@ -226,8 +276,9 @@ def train(opt, train_loader, adapt_loader, model, model_ema, epoch, val_loader, 
     consistency_weight = get_current_consistency_weight(opt.consistency_weight,
                                                         epoch, opt.consistency_rampup)
     
-    for i, train_data in enumerate(train_loader): # TODO different data augmentation
+    for i, train_data in enumerate(train_loader): 
         # measure data loading time
+        
         data_time.update(time.time() - end)
         model.Eiters += 1
 
@@ -242,29 +293,24 @@ def train(opt, train_loader, adapt_loader, model, model_ema, epoch, val_loader, 
             adapt_data = next(adapt_iter)
         except:
             adapt_iter = iter(adapt_loader)
-            adapt_data = next(adapt_iter)
+            adapt_data = next(adapt_iter)        
 
-        unlabel_imgs, unlabel_imgs_ema, _, _ = adapt_data
-        unlabel_imgs = unlabel_imgs.float().cuda()
-        unlabel_imgs_ema = unlabel_imgs_ema.float().cuda()
-        # Update the model
-        img_emb, cap_emb = model.run_emb(*train_data)
+        # Get embeddings
+        img_emb, cap_emb = model.run_emb(*train_data)        
+
+        # Data for Domain Adaptation or SS Learning 
+        # Adapt loader returns different features for the same images
+        adapt_imgs_ema, adapt_imgs, _, _, _ = adapt_data        
+        adapt_imgs = adapt_imgs.float().cuda()        
+        adapt_imgs_ema = adapt_imgs_ema.float().cuda()
+                        
         with torch.no_grad():
-            ema_unlabel_img_emb = model_ema.img_enc(unlabel_imgs_ema)
+            ema_adapt_imgs_emb = model_ema.img_enc(adapt_imgs_ema)
 
-        unlabel_img_emb = model.img_enc(unlabel_imgs)
+        adapt_imgs_emb = model.img_enc(adapt_imgs)
 
-        consistency_loss_img = adapt_loss(ema_unlabel_img_emb, unlabel_img_emb)
+        consistency_loss_img = adapt_loss(ema_adapt_imgs_emb, adapt_imgs_emb)
         consistency_loss = consistency_loss_img * consistency_weight
-
-        if i % 100 == 0 and opt.log_images:
-            plot_img = vutils.make_grid(train_data[0],
-                            normalize=True, scale_each=True)
-            tb_writer.add_image('Labeled Images', plot_img, model.Eiters)
-
-            plot_img = vutils.make_grid(unlabel_imgs,
-                            normalize=True, scale_each=True)
-            tb_writer.add_image('Unlabeled Images', plot_img, model.Eiters)
 
         # measure accuracy and record loss
         model.optimizer.zero_grad()
@@ -279,15 +325,19 @@ def train(opt, train_loader, adapt_loader, model, model_ema, epoch, val_loader, 
         model.optimizer.step()
 
         if epoch <= opt.ema_late_epoch:
-            update_ema_variables(model=model,
-                                 ema_model=model_ema,
-                                 alpha=opt.consistency_alpha,
-                                 global_step=model.Eiters)
+            update_ema_variables(
+                model=model,
+                ema_model=model_ema,
+                alpha=opt.consistency_alpha,
+                global_step=model.Eiters,
+            )
         else:
-            update_ema_variables(model=model,
-                                 ema_model=model_ema,
-                                 alpha=opt.consistency_alpha_late,
-                                 global_step=model.Eiters)
+            update_ema_variables(
+                model=model,
+                ema_model=model_ema,
+                alpha=opt.consistency_alpha_late,
+                global_step=model.Eiters,
+            )
 
         # measure elapsed time
         batch_time.update(time.time() - end)
@@ -328,6 +378,16 @@ def train(opt, train_loader, adapt_loader, model, model_ema, epoch, val_loader, 
             # validate(opt, val_loader, model_ema, tb_writer)
             print('Validate EMA')
             validate(opt, val_loader, model, tb_writer)
+
+            if opt.log_images:
+                plot_img = vutils.make_grid(train_data[0],
+                                normalize=True, scale_each=True)
+                tb_writer.add_image('Labeled Images', plot_img, model.Eiters)
+
+                plot_img = vutils.make_grid(adapt_imgs,
+                                normalize=True, scale_each=True)
+                tb_writer.add_image('Adapt Images', plot_img, model.Eiters)
+
 
 
 def validate(opt, val_loader, model, tb_writer):

@@ -114,22 +114,18 @@
 # --lr_update 10 \
 
 
-
-
-python train.py \
---data_path /opt/datasets/chain/coco/ \
---data_name 10resnet152_precomp \
---img_dim 2048 \
---logger_name runs/noise_0.1_c10_lrC/ \
---text_encoder gru \
---max_violation \
---vocab ./vocab \
---add_data \
---noise .1 \
---use_restval \
---consistency_weight 10. \
---learning_rate 4e-4 \
---lr_update 5 \
---lr_decay 0.5 \
-
-
+# python train.py \
+# --data_path /opt/datasets/chain/coco/ \
+# --data_name 10resnet152_precomp \
+# --img_dim 2048 \
+# --logger_name runs/noise_0.1_c10_lrC/ \
+# --text_encoder gru \
+# --max_violation \
+# --vocab ./vocab \
+# --add_data \
+# --noise .1 \
+# --use_restval \
+# --consistency_weight 10. \
+# --learning_rate 4e-4 \
+# --lr_update 5 \
+# --lr_decay 0.5 \

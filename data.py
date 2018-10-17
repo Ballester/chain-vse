@@ -80,7 +80,8 @@ def get_paths(path, name='coco', use_restval=False):
 class CocoDataset(data.Dataset):
     """COCO Custom Dataset compatible with torch.utils.data.DataLoader."""
 
-    def __init__(self, root, json, tokenizer, transform=None, ids=None):
+    def __init__(self, root, json, tokenizer, 
+                 transform=None, ids=None, adapt_set=False):
         """
         Args:
             root: image directory.
@@ -109,6 +110,7 @@ class CocoDataset(data.Dataset):
             self.bp = len(self.ids)
         self.tokenizer = tokenizer
         self.transform = transform
+        self.adapt_set = adapt_set
 
     def __getitem__(self, index):
         """This function returns a tuple that is further passed to collate_fn
@@ -116,11 +118,16 @@ class CocoDataset(data.Dataset):
         tokenizer = self.tokenizer
         root, caption, img_id, path, image = self.get_raw_item(index)
 
+        # Convert caption (string) to word ids.
+        target = tokenizer.tokenize_text(caption)
+        
         if self.transform is not None:
             image = self.transform(image)
 
-        # Convert caption (string) to word ids.
-        target = tokenizer.tokenize_text(caption)
+            if self.adapt_set:
+                image_adapt = self.transform(image)
+                return (image, image_adapt), target, index, img_id
+                
         return image, target, index, img_id
 
     def get_raw_item(self, index):
@@ -152,7 +159,7 @@ class UnlabeledCocoDataset(data.Dataset):
             json: coco annotation file path.
             tokenizer: tokenizer wrapper.
             transform: transformer for image.
-        """
+        """        
         self.root = root
         self.files = os.listdir(root)
         self.n = len(self.files)
@@ -169,7 +176,7 @@ class UnlabeledCocoDataset(data.Dataset):
             image_std = self.transform(image)
             image_ema = self.transform(image)
 
-        return image_std, image_ema, path, index
+        return image_std, image_ema, -1, path, index
 
     def __len__(self):
         return self.n
@@ -180,11 +187,12 @@ class FlickrDataset(data.Dataset):
     Dataset loader for Flickr30k and Flickr8k full datasets.
     """
 
-    def __init__(self, root, json, split, tokenizer, transform=None):
+    def __init__(self, root, json, split, tokenizer, transform=None, adapt_set=False):
         self.root = root
         self.tokenizer = tokenizer
         self.split = split
         self.transform = transform
+        self.adapt_set = adapt_set
         self.dataset = jsonmod.load(open(json, 'r'))['images']
         self.ids = []
         for i, d in enumerate(self.dataset):
@@ -201,12 +209,16 @@ class FlickrDataset(data.Dataset):
         caption = self.dataset[img_id]['sentences'][ann_id[1]]['raw']
         path = self.dataset[img_id]['filename']
 
+        # Convert caption (string) to word ids.
+        target = tokenizer.tokenize_text(caption)
+        
         image = Image.open(os.path.join(root, path)).convert('RGB')
         if self.transform is not None:
             image = self.transform(image)
-
-        # Convert caption (string) to word ids.
-        target = tokenizer.tokenize_text(caption)
+            if self.adapt_set:
+                image_adapt = self.transform(image)
+                return (image, image_adapt), target, index, img_id
+        
         return image, target, index, img_id
 
     def __len__(self):
@@ -215,7 +227,7 @@ class FlickrDataset(data.Dataset):
 
 class UnlabeledPrecompDataset(data.Dataset):
 
-    def __init__(self, data_path, sigma=0.1):
+    def __init__(self, data_path, sigma=0.1, ):        
         self.features = np.load(os.path.join(data_path, 'unlabeled_ims.npy'))
         self.n = len(self.features)
         print(self.features.shape)        
@@ -228,14 +240,18 @@ class UnlabeledPrecompDataset(data.Dataset):
     def __getitem__(self, idx):
         feat_tensor = torch.FloatTensor(self.features[idx]) 
 
-        noise = feat_tensor.clone().normal_(0., self.sigma)
-        noise_ema = feat_tensor.clone().normal_(0., self.sigma)
+        noise = add_noise(feat_tensor, self.sigma)
+        noise_ema = add_noise(feat_tensor, self.sigma)
 
         feat_tensor = feat_tensor + noise
         feat_tensor_ema = feat_tensor + noise_ema        
         # feat_tensor_ema = feat_tensor
-        return feat_tensor, feat_tensor_ema, idx, 1
+        return feat_tensor, feat_tensor_ema, -1, idx, 1
         
+
+def add_noise(x, sigma):
+    return x+x.clone().normal_(0., sigma)
+
 
 class PrecompDataset(data.Dataset):
     """
@@ -243,9 +259,13 @@ class PrecompDataset(data.Dataset):
     Possible options: f8k, f30k, coco, 10crop
     """
 
-    def __init__(self, data_path, data_split, tokenizer):
+    def __init__(self, data_path, data_split, 
+                tokenizer, sigma=0.01, adapt_set=False):
+        self.data_path = data_path
         self.tokenizer = tokenizer
+        self.adapt_set = adapt_set
         loc = data_path + '/'
+        self.sigma = sigma
 
         # Captions
         self.captions = []
@@ -255,27 +275,37 @@ class PrecompDataset(data.Dataset):
 
         # Image features
         self.images = np.load(loc + '%s_ims.npy' % data_split)
+        print(self.images.shape)
         self.length = len(self.captions)
-        # rkiros data has redundancy in images, we divide by 5, 10crop doesn't
 
-
+        # rkiros data has redundancy in images
+        # we divide by 5, 10crop doesn't
         if self.images.shape[0] != self.length:
             self.im_div = 5
         else:
             self.im_div = 1
+
         # the development set for coco is large and so validation would be slow
-        if data_split == 'dev':
-            self.length = 5000       
+        if data_split == 'val':
+            self.length = 5000
 
     def __getitem__(self, index):
         # handle the image redundancy
-        img_id = index/self.im_div
-        image = torch.Tensor(self.images[img_id])
+        img_id = index//self.im_div   
+        image = torch.FloatTensor(self.images[img_id])
+
+        image = add_noise(image, self.sigma)        
+
         caption = self.captions[index]
         tokenizer = self.tokenizer
 
         # Convert caption (string) to word ids.
         target = tokenizer.tokenize_text(caption)
+        
+        if self.adapt_set:
+            image_ema = add_noise(image, self.sigma)
+            return (image, image_ema), target, index, img_id
+        
         return image, target, index, img_id
 
     def __len__(self):
@@ -298,9 +328,15 @@ def collate_fn(data):
     data.sort(key=lambda x: len(x[1]), reverse=True)
     images, captions, ids, img_ids = zip(*data)
 
+    # Loading for adapt set that requires different crops
+    images_ema = None    
+    if len(images[0]) == 2:
+        images, images_ema = zip(*images)
+        images_ema = torch.stack(images_ema, 0)        
+
     # Merge images (convert tuple of 3D tensor to 4D tensor)
     images = torch.stack(images, 0)
-
+    
     # Merget captions (convert tuple of 1D tensor to 2D tensor)
     lengths = list(map(len, captions))
 
@@ -308,6 +344,9 @@ def collate_fn(data):
     for i, cap in enumerate(captions):
         end = lengths[i]
         targets[i, :end] = cap[:end]
+
+    if images_ema is not None:
+        return images, images_ema, targets, lengths, ids
 
     return images, targets, lengths, ids
 
@@ -318,61 +357,85 @@ def get_loader_single(data_name, split, root, json, tokenizer, transform,
     """Returns torch.utils.data.DataLoader for custom coco dataset."""
     if 'coco' in data_name:
         # COCO custom dataset
-        dataset = CocoDataset(root=root,
-                              json=json,
-                              tokenizer=tokenizer,
-                              transform=transform,
-                              ids=ids)
+        dataset = CocoDataset(
+            root=root,
+            json=json,
+            tokenizer=tokenizer,
+            transform=transform,
+            ids=ids
+        )
 
     elif 'f8k' in data_name or 'f30k' in data_name:
-        dataset = FlickrDataset(root=root,
-                                split=split,
-                                json=json,
-                                tokenizer=tokenizer,
-                                transform=transform)
+        dataset = FlickrDataset(
+            root=root,
+            split=split,
+            json=json,
+            tokenizer=tokenizer,
+            transform=transform
+        )
 
     # It crashes when using CPU-only and pin_memory
     pin_memory = False
     if torch.cuda.is_available():
         pin_memory = True
+    
     # Data loader
-    data_loader = torch.utils.data.DataLoader(dataset=dataset,
-                                              batch_size=batch_size,
-                                              shuffle=shuffle,
-                                              pin_memory=pin_memory,
-                                              num_workers=num_workers,
-                                              collate_fn=collate_fn)
+    data_loader = torch.utils.data.DataLoader(
+        dataset=dataset,
+        batch_size=batch_size,
+        shuffle=shuffle,
+        pin_memory=pin_memory,
+        num_workers=num_workers,
+        collate_fn=collate_fn
+    )
+
     return data_loader
 
 
-def get_precomp_loader(data_path, data_split, tokenizer, opt, batch_size=100,
-                       shuffle=True, num_workers=2, collate_fn=collate_fn):
+def get_precomp_loader(
+        data_path, data_split, tokenizer, 
+        opt, batch_size=100, shuffle=True, 
+        num_workers=2, collate_fn=collate_fn, 
+        adapt_set=False
+    ):
     """Returns torch.utils.data.DataLoader for custom coco dataset."""
-    dset = PrecompDataset(data_path, data_split, tokenizer)
+    
+    dset = PrecompDataset(
+        data_path=data_path, 
+        data_split=data_split, 
+        tokenizer=tokenizer, 
+        adapt_set=adapt_set,
+        sigma=opt.noise,
+    )
 
     pin_memory = False
     if torch.cuda.is_available():
         pin_memory = True
 
-    data_loader = torch.utils.data.DataLoader(dataset=dset,
-                                              batch_size=batch_size,
-                                              shuffle=shuffle,
-                                              pin_memory=pin_memory,
-                                              collate_fn=collate_fn)
+    data_loader = torch.utils.data.DataLoader(
+        dataset=dset,
+        batch_size=batch_size,
+        shuffle=shuffle,
+        pin_memory=pin_memory,
+        collate_fn=collate_fn
+    )
+    
     return data_loader
 
 
 def get_transform(data_name, split_name, opt):
-    normalizer = transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                     std=[0.229, 0.224, 0.225])
-    # normalizer = transforms.Normalize(mean=[0.5, 0.5, 0.5],
-    #                                   std=[0.5, 0.5, 0.5])
+    normalizer = transforms.Normalize(
+        mean=[0.485, 0.456, 0.406],
+        std=[0.229, 0.224, 0.225]
+    )
+
     t_list = []
     if split_name == 'train':
         t_list = [
-                  transforms.Scale(256),
-                  transforms.RandomSizedCrop(opt.crop_size),
-                  transforms.RandomHorizontalFlip()]
+            transforms.Scale(256),
+            transforms.RandomSizedCrop(opt.crop_size),
+            transforms.RandomHorizontalFlip(),
+        ]
     elif split_name == 'val':
         t_list = [transforms.Scale(256), transforms.CenterCrop(224)]
     elif split_name == 'test':
@@ -383,7 +446,7 @@ def get_transform(data_name, split_name, opt):
     return transform
 
 
-def get_loaders(data_name, tokenizer, crop_size, batch_size, workers, opt, collate_fn_str='collate_fn'):
+def _get_loaders(data_name, tokenizer, crop_size, batch_size, workers, opt, collate_fn_str='collate_fn'):
     
     dpath = os.path.join(opt.data_path, data_name)
     cfn = eval(collate_fn_str)
@@ -415,7 +478,7 @@ def get_loaders(data_name, tokenizer, crop_size, batch_size, workers, opt, colla
                                          tokenizer, transform, ids=ids['train'],
                                          batch_size=batch_size, shuffle=True,
                                          num_workers=workers,
-                                         collate_fn=cfn)
+                                         collate_fn=cfn,)
 
         transform = get_transform(data_name, 'val', opt)
         val_loader = get_loader_single(opt.data_name, 'val',
@@ -440,6 +503,80 @@ def get_loaders(data_name, tokenizer, crop_size, batch_size, workers, opt, colla
             return (train_loader, adapt_loader), val_loader
 
     return train_loader, val_loader
+
+
+def get_loader(
+        data_name, tokenizer, crop_size, 
+        batch_size, workers, opt, 
+        split='train', adapt_set=False
+    ):
+    
+    dpath = os.path.join(opt.data_path, data_name)    
+
+    if opt.data_name.endswith('_precomp'):
+
+        if split in ['train', 'val', 'test']:
+            loader = get_precomp_loader(
+                data_path=dpath, 
+                data_split=split, 
+                tokenizer=tokenizer, 
+                opt=opt,
+                batch_size=batch_size, 
+                shuffle=(split == 'train'), 
+                num_workers=workers, 
+                collate_fn=collate_fn,
+                adapt_set=adapt_set,
+            )
+        elif split == 'adapt':
+            adapt_dataset = UnlabeledPrecompDataset(
+                data_path=dpath,
+                sigma=opt.noise,                
+            )
+            loader = torch.utils.data.DataLoader(
+                dataset=adapt_dataset,
+                batch_size=batch_size,
+                shuffle=True,
+                pin_memory=True,
+            )
+
+    else:
+        # Build Dataset Loader
+        roots, ids = get_paths(dpath, data_name, opt.use_restval)
+
+        if split in ['train', 'val', 'test']:
+            transform = get_transform(data_name, split, opt)
+            loader = get_loader_single(
+                data_name=opt.data_name,
+                split=split,
+                root=roots[split]['img'],
+                json=roots[split]['cap'],
+                tokenizer=tokenizer,
+                transform=transform,
+                ids=ids[split],
+                batch_size=batch_size,
+                shuffle=(split == 'train'),
+                num_workers=workers,
+                collate_fn=collate_fn,
+                adapt_set=adapt_set,
+            )
+
+        elif split == 'adapt':
+            adapt_dataset = UnlabeledCocoDataset(
+                root=roots['unlabeled']['img'],
+                transform=transform,
+                adapt_set=True,
+            )
+
+            loader = torch.utils.data.DataLoader(
+                dataset=adapt_dataset,
+                batch_size=batch_size,
+                shuffle=True,
+                pin_memory=True,
+                num_workers=4,
+            )
+    
+    return loader
+    
 
 
 def get_test_loader(split_name, data_name, tokenizer, crop_size, batch_size,

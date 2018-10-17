@@ -1,7 +1,5 @@
 # Bidirectional Retrieval Made Simple
 
-Code for our CVPR"18 paper [Bidirectional Retrieval Made Simple](http://openaccess.thecvf.com/content_cvpr_2018/papers/Wehrmann_Bidirectional_Retrieval_Made_CVPR_2018_paper.pdf). Given that the original code from our work cannot be publicly shared, we adapted the code from [VSE++](https://github.com/fartashf/vsepp) in order to provide a public version.
-
 Overview:
 1. [Summary](#summary)
 2. [Results](#results)
@@ -13,21 +11,17 @@ Overview:
 6. [Citation](#citation)
 7. [License](#license)
 
-## <a name="summary"></a>Summary
+## <a name="data"></a> Training
 
-Code for training and evaluating our novel CHAIN-VSE models for efficient multimodal retrieval (image annotation and caption retrieval). In summary, CHAIN-VSE uses convolutional layers directly over character-level inputs fully replacing the use of RNNs and word-embeddings. Despite being lighter and conceptually much simpler, those models achieve state-of-the-art results in MS COCO and in some text classification datasets. 
+` TODO: update scripts `
 
-<img src="https://raw.githubusercontent.com/jwehrmann/chain-vse/master/figures/chain.png" alt="chain" width="250px"/> <img src="https://raw.githubusercontent.com/jwehrmann/chain-vse/master/figures/inputnoise.jpeg" alt="noise" width="300px"/><img src="https://raw.githubusercontent.com/jwehrmann/chain-vse/master/figures/params.jpeg" alt="param" width="300px"/>
+* Baseline models: `sh scripts/run.sh`
+* Precomp Features: `sh scripts/run_precomp.sh`
+* Precomp + DA: `sh scripts/run_precomp_da.sh`
 
+## <a name="results"></a> Validation Results
 
-### Highlights
-* Independent from word-embeddings and RNNs
-* Naturally suited for multi-language scenarios without increase of memory requirements due to larger vocabulary
-* Much more robust to input noise
-* Fewer parameters 
-* Simple, yet effective
-
-## <a name="results"></a> Bidirectional Retrival Results 
+` TODO: update results `
 
 Results achieved using this repository (COCO-1k test set) using pre-computed features (note that we do not finetune the network in this experiment): 
 
@@ -46,15 +40,15 @@ For getting started you will need to setup your environment and download the req
 ### <a name="depend"></a> Dependencies
 We recommended to use Anaconda for the following packages.
 
-* Python 2.7
+* Python 2.7 or 3.x
 * [PyTorch](http://pytorch.org/) (>0.1.12)
 * [NumPy](http://www.numpy.org/) (>1.12.1)
-* [TensorBoard](https://github.com/TeamHG-Memex/tensorboard_logger)
-* Punkt Sentence Tokenizer (used in our baselines):
-```python
+* TensorBoardX: `pip install tensorboardX`
+* Punkt Sentence Tokenizer:
+```
+python
 import nltk
-nltk.download()
-> d punkt
+nltk.download('punkt')
 ```
 
 ### <a name="data"></a> Download data
@@ -68,20 +62,6 @@ wget http://lsa.pucrs.br/jonatas/seam-data/vocab.tar.gz
 
 * The directory of the `*_precomp.tar.gz` files are referred as `$DATA_PATH`
 * Extract `vocab.tar.gz` to `./vocab` directory (*required for baselines only*).
-
-## <a name="train"></a> Training new models
-Run `train.py`:
-
-To train CHAIN-VSE (p=1, d=2048) using resnet152_precomp features, run: 
-```bash
-python train.py \
---data_path "$DATA_PATH" \
---data_name resnet152_precomp \
---logger_name runs/chain-v1/resnet152_precomp/  \
---text_encoder chain-v1 \
---embed_size 2048 \
---vocab_path char
-```
 
 ## <a name="evaluate"></a> Evaluate pre-trained models
 
