@@ -24,14 +24,26 @@ Overview:
 
 ` TODO: update results `
 
-Results achieved using this repository (COCO-1k test set) using pre-computed features (note that we do not finetune the network in this experiment): 
-
 ### Flickr30k 
-| Method      | TrainSet    | AdaptSet  | R@1     | R@10    | R@1     | R@10    | Settings   | 
-| :-------:   | :----:      | :-----:   | :-----: | :-----: | :-----: | :-----: | :-----:    | 
-| VSEPP       | `flickr`    |    -      |  46.8  |  84.0  | 33.9    |  73.1  |                      |
-| VSE+EMA     | `flickr`    |    -      |  45.0  |  83.5  | 31.9    |  72.2   | `run_baseline.sh #1` |
-| VSE+EMA     | `coco`      | `flickr`  |  56.4  |  91.5  | 43.90   |  88.60  | `run_baseline.sh #1` |
+| Method    | Feat        | TrainSet    | AdaptSet      | R@1      | R@10    | R@1     | R@10    | Settings             | 
+| :-------: |:----:       | :----:      | :-----:       | :-----:  | :-----: | :-----: | :-----: | :-----:              | 
+| VSEPP     | Finetune    | `flickr`    |    -          |  52.9    |  87.2   | 39.6    |  79.5   |                      |
+| VSEPP     | Precomp     | `flickr`    |    -          |  46.8    |  84.0   | 33.9    |  73.1   |                      |
+| VSE+EMA   | Precomp     | `flickr`    |    -          |  45.0    |  83.5   | 31.9    |  72.2   | `run_baseline.sh #1` |
+
+
+### Domain daptation Coco -> Flickr
+| Method    |  Feat       | TrainSet    | AdaptSet      | R@1     | R@10    | R@1     | R@10    | Settings              | 
+| :-------: |:----:       | :----:      | :-----:       | :-----: | :-----: | :-----: | :-----: | :-----:               | 
+| VSEPP     |  Precomp    | `coco`      | `f30k-train`  |  33.4   |  76.4   | 22.6    |   63.1  |                       |
+| VSE+EMA   |  Finetune   | `coco-ft`   | `unlabeled`   |  44.2   |  81.4   | 33.2    |  72.2   |                       |
+
+
+## Test Set COCO (5k-cv)
+| Method    | Feat        | TrainSet    | AdaptSet      | R@1     | R@10    | R@1     | R@10    | Settings              | 
+| :-------: | :-:         | :----:      | :-----:       | :-----: | :-----: | :-----: | :-----: | :-----:               | 
+| VSEPP     |  Finetune   | `coco`      |    -          |  64.6   |  95.7   | 52.0    |  92.0   |                       |
+| VSE+EMA   |  Finetune   | `coco`      | `unlabeled`   |  64.1   |  95.9   | 53.2    |  92.9   |                       |
 
 
 ## <a name="start"></a> Getting Started

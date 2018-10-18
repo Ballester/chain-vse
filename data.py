@@ -448,7 +448,9 @@ def get_transform(data_name, split_name, opt):
     return transform
 
 
-def _get_loaders(data_name, tokenizer, crop_size, batch_size, workers, opt, collate_fn_str='collate_fn'):
+def _get_loaders(
+    data_name, tokenizer, crop_size, 
+    batch_size, workers, opt, collate_fn_str='collate_fn'):
     
     dpath = os.path.join(opt.data_path, data_name)
     cfn = eval(collate_fn_str)
@@ -474,34 +476,40 @@ def _get_loaders(data_name, tokenizer, crop_size, batch_size, workers, opt, coll
         roots, ids = get_paths(dpath, data_name, opt.use_restval)
 
         transform = get_transform(data_name, 'train', opt)
-        train_loader = get_loader_single(opt.data_name, 'train',
-                                         roots['train']['img'],
-                                         roots['train']['cap'],
-                                         tokenizer, transform, ids=ids['train'],
-                                         batch_size=batch_size, shuffle=True,
-                                         num_workers=workers,
-                                         collate_fn=cfn,)
+        train_loader = get_loader_single(
+            opt.data_name, 'train',
+            roots['train']['img'],
+            roots['train']['cap'],
+            tokenizer, transform, ids=ids['train'],
+            batch_size=batch_size, shuffle=True,
+            num_workers=workers,
+            collate_fn=cfn,
+        )
 
         transform = get_transform(data_name, 'val', opt)
-        val_loader = get_loader_single(opt.data_name, 'val',
-                                       roots['val']['img'],
-                                       roots['val']['cap'],
-                                       tokenizer, transform, ids=ids['val'],
-                                       batch_size=batch_size, shuffle=False,
-                                       num_workers=workers,
-                                       collate_fn=cfn)
+        val_loader = get_loader_single(
+            opt.data_name, 'val',
+            roots['val']['img'],
+            roots['val']['cap'],
+            tokenizer, transform, ids=ids['val'],
+            batch_size=batch_size, shuffle=False,
+            num_workers=workers,
+            collate_fn=cfn,
+        )
 
         if opt.add_data:
             adapt_dataset = UnlabeledCocoDataset(
                                 root=roots['unlabeled']['img'],
                                 transform=transform)
 
-            adapt_loader = torch.utils.data.DataLoader(dataset=adapt_dataset,
-                                              batch_size=batch_size,
-                                              shuffle=True,
-                                              pin_memory=True,
-                                              num_workers=4,
-                                              )
+            adapt_loader = torch.utils.data.DataLoader(
+                dataset=adapt_dataset,
+                batch_size=batch_size,
+                shuffle=True,
+                pin_memory=True,
+                num_workers=4,
+            )
+
             return (train_loader, adapt_loader), val_loader
 
     return train_loader, val_loader
@@ -565,8 +573,7 @@ def get_loader(
         elif split == 'adapt':
             adapt_dataset = UnlabeledCocoDataset(
                 root=roots['unlabeled']['img'],
-                transform=transform,
-                adapt_set=True,
+                transform=transform,                
             )
 
             loader = torch.utils.data.DataLoader(
@@ -594,13 +601,15 @@ def get_test_loader(split_name, data_name, tokenizer, crop_size, batch_size,
         roots, ids = get_paths(dpath, data_name, opt.use_restval)
 
         transform = get_transform(data_name, split_name, opt)
-        test_loader = get_loader_single(opt.data_name, split_name,
-                                        roots[split_name]['img'],
-                                        roots[split_name]['cap'],
-                                        tokenizer, transform, ids=ids[split_name],
-                                        batch_size=batch_size, shuffle=False,
-                                        num_workers=workers,
-                                        collate_fn=collate_fn)
+        test_loader = get_loader_single(
+            opt.data_name, split_name,
+            roots[split_name]['img'],
+            roots[split_name]['cap'],
+            tokenizer, transform, ids=ids[split_name],
+            batch_size=batch_size, shuffle=False,
+            num_workers=workers,
+            collate_fn=collate_fn
+        )
     return test_loader
 
 

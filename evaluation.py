@@ -123,7 +123,8 @@ def encode_data(model, data_loader, log_step=10, logging=print):
 
 def evalrank(
         model_path, data_path=None, split='dev', 
-        fold5=False, test_measure=None, log_step=10000
+        fold5=False, test_measure=None, log_step=10000,
+        data_name=None, batch_size=None
     ):
     """
     Evaluate a trained model on either dev or test. If `fold5=True`, 5 fold
@@ -135,6 +136,12 @@ def evalrank(
     opt = checkpoint['opt']
     if data_path is not None:
         opt.data_path = data_path
+    
+    if data_name is not None:
+        opt.data_name = data_name
+    
+    if batch_size is not None:
+        opt.batch_size = batch_size
 
     tokenizer, vocab_size = get_tokenizer(opt.vocab_path, opt.data_name)
     opt.vocab_size = vocab_size
@@ -204,6 +211,7 @@ def evalrank(
               mean_metrics[5:10])
 
     torch.save({'rt': rt, 'rti': rti}, 'ranks.pth.tar')
+    
     return results, mean_metrics
 
 

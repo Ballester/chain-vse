@@ -32,16 +32,18 @@ def main():
                         help='data name for the training set')    
     
     parser.add_argument('--adapt_data', default='10resnet152_precomp',
-                        help='data name for loading the adapt set ')
-    parser.add_argument('--adapt_split', default='val',
+                        help='data name for loading the adapt set ', 
+                        choices=['flickr30k_precomp', '10resnet152_precomp', 'coco'])
+    parser.add_argument('--adapt_split', default='train',
                         help='split for performing domain adapt',
                         choices=['train', 'val', 'test', 'unlabeled'])
     parser.add_argument('--adapt_batch_size', default=128, type=int,
                         help='Adapt set mini-batch size.')
 
     parser.add_argument('--val_data', default='10resnet152_precomp',
-                        help='data name for loading the val set')
-    parser.add_argument('--val_split', default='10resnet152_precomp',
+                        help='data name for loading the val set', 
+                        choices=['flickr30k_precomp', '10resnet152_precomp', 'coco'])
+    parser.add_argument('--val_split', default='val',
                         help='data name for loading the val set')
     parser.add_argument('--val_batch_size', default=128, type=int,
                         help='Validation mini-batch size.')
@@ -91,7 +93,7 @@ def main():
     parser.add_argument('--cnn_type', default='vgg19',
                         help="""The CNN used for image encoder
                         (e.g. vgg19, resnet152)""")
-    parser.add_argument('--use_restval', action='store_true',
+    parser.add_argument('--use_restval', action='store_false',
                         help='Use the restval data for training on MSCOCO.')
     parser.add_argument('--measure', default='cosine',
                         help='Similarity measure used (cosine|order)')
@@ -239,9 +241,9 @@ def main():
 
         # evaluate on validation set
         # print('Valdiate Normal')
-        # rsum = validate(opt, val_loader, model_ema, writer)
         print('Valdiate EMA')
-        rsum = validate(opt, val_loader, model, writer)
+        rsum = validate(opt, val_loader, model_ema, writer)
+        # rsum = validate(opt, val_loader, model, writer)
         # rsum_adapt = validate(opt, val_adapt_loader, model_ema)
 
         # remember best R@ sum and save checkpoint
@@ -300,17 +302,26 @@ def train(opt, train_loader, adapt_loader, model, model_ema, epoch, val_loader, 
 
         # Data for Domain Adaptation or SS Learning 
         # Adapt loader returns different features for the same images
-        adapt_imgs_ema, adapt_imgs, _, _, _ = adapt_data        
-        adapt_imgs = adapt_imgs.float().cuda()        
+        adapt_imgs_ema, adapt_imgs, adapt_caption, adapt_lens, _ = adapt_data
+            
+        adapt_imgs = adapt_imgs.float().cuda()                
         adapt_imgs_ema = adapt_imgs_ema.float().cuda()
+        
+        consistency_loss_cap = 0.
+        if opt.adapt_split != 'unlabeled':            
+            with torch.no_grad():
+                adapt_caption = adapt_caption.cuda()
+                ema_adapt_cap_emb = model_ema.txt_enc(adapt_caption, adapt_lens)
+                adapt_cap_mb = model.txt_enc(adapt_caption, adapt_lens)
+                consistency_loss_cap = adapt_loss(ema_adapt_cap_emb, adapt_cap_mb)
                         
         with torch.no_grad():
-            ema_adapt_imgs_emb = model_ema.img_enc(adapt_imgs_ema)
+            ema_adapt_imgs_emb = model_ema.img_enc(adapt_imgs_ema)            
 
         adapt_imgs_emb = model.img_enc(adapt_imgs)
 
         consistency_loss_img = adapt_loss(ema_adapt_imgs_emb, adapt_imgs_emb)
-        consistency_loss = consistency_loss_img * consistency_weight
+        consistency_loss = (consistency_loss_img/2. + consistency_loss_cap/2.) * consistency_weight
 
         # measure accuracy and record loss
         model.optimizer.zero_grad()
@@ -375,9 +386,9 @@ def train(opt, train_loader, adapt_loader, model, model_ema, epoch, val_loader, 
         # validate at every val_step
         if model.Eiters % opt.val_step == 0:
             # print('Validate normal')
-            # validate(opt, val_loader, model_ema, tb_writer)
             print('Validate EMA')
-            validate(opt, val_loader, model, tb_writer)
+            validate(opt, val_loader, model_ema, tb_writer)            
+            # validate(opt, val_loader, model, tb_writer)
 
             if opt.log_images:
                 plot_img = vutils.make_grid(train_data[0],

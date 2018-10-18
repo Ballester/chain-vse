@@ -1,12 +1,7 @@
 python train.py \
---data_name coco \
---cnn_type vgg19 \
+--cnn_type 10resnet152_precomp \
 --text_encoder gru \
 --max_violation \
 --vocab ./vocab \
---batch_size 75 \
 --add_data \
---use_restval \
---logger_name runs/vgg19_adjs \
---learning_rate 2e-4 \
---margin 0.2
+--logger_name runs/ \
