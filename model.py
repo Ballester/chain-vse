@@ -262,18 +262,19 @@ class ContrastiveLoss(nn.Module):
     Compute contrastive loss
     """
 
-    def __init__(self, margin=0, measure=False, max_violation=False, sim_power=1):
-        super(ContrastiveLoss, self).__init__()
-        self.sim_power = sim_power
+    def __init__(self, margin=0, measure=False,):
+        super(ContrastiveLoss, self).__init__()        
         self.margin = margin
         if measure == 'order':
             self.sim = order_sim
         else:
-            self.sim = cosine_sim
+            self.sim = cosine_sim        
 
-        self.max_violation = max_violation
-
-    def forward(self, im, s):
+    def forward(self, im, s, gamma=1.):
+        '''
+            when gamma == 1: using only hard_contrastives
+                 gamma == 0: using all contrastives
+        '''
         # compute image-sentence score matrix
         scores = self.sim(im, s)
         diagonal = scores.diag().view(im.size(0), 1)
@@ -295,20 +296,22 @@ class ContrastiveLoss(nn.Module):
         cost_s = cost_s.masked_fill_(I, 0)
         cost_im = cost_im.masked_fill_(I, 0)
 
-        cost_s = torch.pow(cost_s, self.sim_power)
-        cost_im = torch.pow(cost_im, self.sim_power)
+        # keep the maximum violating negative for each query        
+        h_cost_s = cost_s.max(1)[0]
+        h_cost_im = cost_im.max(0)[0]
+        
+        all_contr = cost_s.sum() + cost_im.sum()
+        hrd_contr = h_cost_s.sum() + h_cost_im.sum()
 
-        # keep the maximum violating negative for each query
-        if self.max_violation:
-            cost_s = cost_s.max(1)[0]
-            cost_im = cost_im.max(0)[0]
+        loss = all_contr * (1 - gamma) + hrd_contr * gamma
+        return loss
 
-        return cost_s.sum() + cost_im.sum()
 
 def Frobenius(mat):
     size = mat.size()
     if len(size) == 3:  # batched matrix
-        ret = (torch.sum(torch.sum((mat ** 2), 1, keepdim=True), 2, keepdim=True).squeeze() + 1e-10) ** 0.5
+        ret = (
+            torch.sum(torch.sum((mat ** 2), 1, keepdim=True), 2, keepdim=True).squeeze() + 1e-10) ** 0.5
         return torch.sum(ret) / size[0]
     else:
         raise Exception('matrix for computing Frobenius norm should be with 3 dims')
@@ -342,9 +345,10 @@ class VSE(object):
             cudnn.benchmark = True
 
         # Loss and Optimizer
-        self.criterion = ContrastiveLoss(margin=opt.margin,
-                                         measure=opt.measure,
-                                         max_violation=opt.max_violation)
+        self.criterion = ContrastiveLoss(
+            margin=opt.margin,
+            measure=opt.measure
+        )
 
         self.attention = False
         if opt.text_encoder.startswith('attentive'):
@@ -421,8 +425,10 @@ class VSE(object):
     def forward_loss(self, img_emb, cap_emb, **kwargs):
         """Compute the loss given pairs of image and caption embeddings
         """
-
-        loss = self.criterion(img_emb, cap_emb)
+        gamma = 1.
+        if 'gamma' in kwargs:
+            gamma = kwargs['gamma']
+        loss = self.criterion(img_emb, cap_emb, gamma=gamma)
         if self.attention:
             coef = self.opt.att_coef
             attention = self.txt_enc.attention_weights
@@ -430,10 +436,10 @@ class VSE(object):
             extra_loss = Frobenius(torch.bmm(attention, attentionT) - self.I[:attention.size(0)])
             total_loss = loss + coef * extra_loss
 
-            self.logger.update('TotalLoss', total_loss.data[0], img_emb.size(0))
+            self.logger.update('TotalLoss', total_loss.item(), img_emb.size(0))
             self.logger.update('AttLoss', coef * extra_loss.data[0], img_emb.size(0))
 
-        self.logger.update('ContrLoss', loss.data[0], img_emb.size(0))
+        self.logger.update('ContrLoss', loss.item(), img_emb.size(0))
         return loss
 
     def train_emb(self, images, captions, lengths, ids=None, *args):
@@ -448,7 +454,7 @@ class VSE(object):
 
         # measure accuracy and record loss
         self.optimizer.zero_grad()
-        loss = self.forward_loss(img_emb, cap_emb)
+        loss = self.forward_loss(img_emb, cap_emb, args['gamma'])
 
         # compute gradient and do SGD step
         loss.backward()

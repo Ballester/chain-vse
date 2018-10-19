@@ -83,6 +83,8 @@ def main():
                         help='path to latest checkpoint (default: none)')
     parser.add_argument('--max_violation', action='store_true',
                         help='Use max instead of sum in the rank loss.')
+    parser.add_argument('--hard_gamma', type=float, default=0.25,
+                        help='Importance of hard-contrastive across training. [NOTE: this is ignored when using --max_violation]')
     parser.add_argument('--img_dim', default=2048, type=int,
                         help='Dimensionality of the image embedding.')
     parser.add_argument('--finetune', action='store_true',
@@ -258,7 +260,11 @@ def main():
         }, is_best, prefix=opt.logger_name + '/')
 
 
-def train(opt, train_loader, adapt_loader, model, model_ema, epoch, val_loader, tb_writer):
+def train(
+        opt, train_loader, adapt_loader, 
+        model, model_ema, epoch, 
+        val_loader, tb_writer
+    ):
     # average meters to record the training statistics
     from model import ContrastiveLoss
     batch_time = AverageMeter()
@@ -270,7 +276,10 @@ def train(opt, train_loader, adapt_loader, model, model_ema, epoch, val_loader, 
     if opt.adapt_loss == 'mse':
         adapt_loss = torch.nn.MSELoss()
     if opt.adapt_loss == 'contrastive':
-        adapt_loss = ContrastiveLoss()
+        adapt_loss = ContrastiveLoss(
+            margin=opt.margin,
+            measure=opt.measure
+        )
 
     if opt.ramp_lr:
         adjust_learning_rate_mean_teacher(model.optimizer, epoch, opt.num_epochs,
@@ -281,6 +290,14 @@ def train(opt, train_loader, adapt_loader, model, model_ema, epoch, val_loader, 
     consistency_weight = get_current_consistency_weight(opt.consistency_weight,
                                                         epoch, opt.consistency_rampup)
     
+    if opt.max_violation:
+        gamma = 1.
+    else:
+        gamma = adjust_gamma(
+            init_gamma=0.0, epoch=epoch, increase=0.2
+        )
+        train_logger.update('hard_contr_gamma', gamma, n=0)
+
     for i, train_data in enumerate(train_loader): 
         # measure data loading time
         
@@ -328,7 +345,7 @@ def train(opt, train_loader, adapt_loader, model, model_ema, epoch, val_loader, 
 
         # measure accuracy and record loss
         model.optimizer.zero_grad()
-        loss = model.forward_loss(img_emb, cap_emb)
+        loss = model.forward_loss(img_emb, cap_emb, gamma=gamma)
         total_loss = loss + consistency_loss
 
         # compute gradient and do SGD step
@@ -451,6 +468,13 @@ def adjust_learning_rate(opt, optimizer, epoch):
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
 
+
+def adjust_gamma(init_gamma, epoch, increase=0.2):
+    """
+        increase == 0.2, gamma reaches 1.0 in 6 epochs.            
+    """
+    new_gamma = min(((init_gamma + increase) * epoch), 1.)
+    return new_gamma
 
 def accuracy(output, target, topk=(1,)):
     """Computes the precision@k for the specified values of k"""
