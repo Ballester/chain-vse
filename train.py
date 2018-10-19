@@ -132,6 +132,8 @@ def main():
                         help='Consistency rampup epoch')
     parser.add_argument('--ema_late_epoch', type=int, default=50,
                         help='When to change alpha variable for consistency weight')
+    parser.add_argument('--adapt_loss', type=str, default='mse',
+                        help='Loss used to perform domain adapt.')
 
 
     opt = parser.parse_args()
@@ -261,13 +263,17 @@ def main():
 
 def train(opt, train_loader, adapt_loader, model, model_ema, epoch, val_loader, tb_writer):
     # average meters to record the training statistics
+    from model import ContrastiveLoss
     batch_time = AverageMeter()
     data_time = AverageMeter()
     train_logger = LogCollector()
 
     end = time.time()
     adapt_iter = iter(adapt_loader)
-    adapt_loss = torch.nn.MSELoss()
+    if opt.adapt_loss == 'mse':
+        adapt_loss = torch.nn.MSELoss()
+    if opt.adapt_loss == 'contrastive':
+        adapt_loss = ContrastiveLoss()
 
     if opt.ramp_lr:
         adjust_learning_rate_mean_teacher(model.optimizer, epoch, opt.num_epochs,

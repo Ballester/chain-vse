@@ -15,12 +15,11 @@ python train.py \
 --max_violation \
 --add_data \
 --use_restval \
---noise 0.1 \
---consistency_weight 20. \
+--noise 0.05 \
+--consistency_weight 1. \
 --vocab ./vocab \
 --consistency_rampup 10 \
---ema_late_epoch 5 \
---ramp_lr \
---initial_lr_rampup 2 \
---num_epochs 50
+--ema_late_epoch 15 \
+--num_epochs 50 \
+--adapt_loss contrastive \
 
