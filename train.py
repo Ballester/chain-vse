@@ -32,17 +32,14 @@ def main():
                         help='data name for the training set')    
     
     parser.add_argument('--adapt_data', default='10resnet152_precomp',
-                        help='data name for loading the adapt set ', 
-                        choices=['flickr30k_precomp', '10resnet152_precomp', 'coco'])
+                        help='data name for loading the adapt set ')
     parser.add_argument('--adapt_split', default='train',
-                        help='split for performing domain adapt',
-                        choices=['train', 'val', 'test', 'unlabeled'])
+                        help='split for performing domain adapt')
     parser.add_argument('--adapt_batch_size', default=128, type=int,
                         help='Adapt set mini-batch size.')
 
     parser.add_argument('--val_data', default='10resnet152_precomp',
-                        help='data name for loading the val set', 
-                        choices=['flickr30k_precomp', '10resnet152_precomp', 'coco'])
+                        help='data name for loading the val set')
     parser.add_argument('--val_split', default='val',
                         help='data name for loading the val set')
     parser.add_argument('--val_batch_size', default=128, type=int,
@@ -74,7 +71,7 @@ def main():
                         help='Number of epochs to update the learning rate.')
     parser.add_argument('--lr_decay', default=0.1, type=float,
                         help='Learnin rate dacay ratio (0.1 reduces lr in 10x).')
-    parser.add_argument('--workers', default=4, type=int,
+    parser.add_argument('--workers', default=8, type=int,
                         help='Number of data loader workers.')
     parser.add_argument('--log_step', default=10, type=int,
                         help='Number of steps to print and record the log.')

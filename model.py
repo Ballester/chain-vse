@@ -40,8 +40,9 @@ def EncoderImage(data_name, img_dim, embed_size, finetune=False,
     computes image features on the fly `EncoderImageFull`.
     """
     if data_name.endswith('_precomp'):
+        is_tensor = ('tensor' in data_name)
         img_enc = EncoderImagePrecomp(
-            img_dim, embed_size, use_abs, no_imgnorm)
+            img_dim, embed_size, use_abs, no_imgnorm, is_tensor=is_tensor)
     else:
         img_enc = EncoderImageFull(
             embed_size, finetune, cnn_type, use_abs, no_imgnorm)
@@ -157,36 +158,66 @@ class EncoderImageFull(nn.Module):
         return features
 
 
+class Flatten(nn.Module):
+
+    def __init__(self, dims):
+        super(Flatten, self).__init__()
+        self.dims = dims
+    
+    def forward(self, x):
+
+        for dim in self.dims:
+            x = x.squeeze(dim)
+
+        return x
+    
+
 class EncoderImagePrecomp(nn.Module):
 
-    def __init__(self, img_dim, embed_size, use_abs=False, no_imgnorm=False):
+    def __init__(
+            self, img_dim, embed_size, 
+            use_abs=False, no_imgnorm=False, is_tensor=False
+        ):
         super(EncoderImagePrecomp, self).__init__()
         self.embed_size = embed_size
         self.no_imgnorm = no_imgnorm
         self.use_abs = use_abs
-        self.fc = False
+        self.is_tensor = is_tensor
+        print('is tensor', is_tensor)
 
-        if img_dim != embed_size or True:
-            self.fc = nn.Linear(img_dim, embed_size).cuda()
-
+        fc = nn.Linear(img_dim, embed_size).cuda()
+        
+        self.fc = fc
+        if is_tensor:
+            conv = nn.Sequential(*[
+                nn.Conv2d(img_dim, img_dim/2, 1, bias=False),
+                nn.BatchNorm2d(img_dim/2),
+                nn.ReLU(inplace=True),
+                nn.Conv2d(img_dim/2, img_dim, 3, padding=1, bias=False),
+                nn.BatchNorm2d(img_dim),
+                nn.ReLU(inplace=True),
+                nn.Conv2d(img_dim, embed_size, kernel_size=1, bias=False),
+                nn.BatchNorm2d(embed_size),
+                nn.ReLU(inplace=True),
+                nn.AdaptiveAvgPool2d(1),                
+                Flatten(dims=(-1, -1)),
+            ]).cuda()
+            self.fc = conv
+        
         self.init_weights()
 
     def init_weights(self):
         """Xavier initialization for the fully connected layer
         """
-        if self.fc:
-            r = np.sqrt(6.) / np.sqrt(self.fc.in_features +
-                                      self.fc.out_features)
-            self.fc.weight.data.uniform_(-r, r)
-            self.fc.bias.data.fill_(0)
+        pass       
 
     def forward(self, images):
         """Extract image feature vectors."""
         # assuming that the precomputed features are already l2-normalized
-
-        features = images
-        if self.fc:
-            features = self.fc(images)
+                
+        features = self.fc(images)
+        if len(features.shape) == 4:
+            features.squeeze(-1).squeeze(-1)
 
         # normalize in the joint embedding space
         if not self.no_imgnorm:

@@ -14,7 +14,7 @@ annotations = {
         'ftrain_caps.txt', 'fval_caps.txt',
     ],
     'coco': ['annotations/captions_train2014.json',
-             'annotations/captions_val2014.json',],
+             'annotations/captions_val2014.json',],    
     'f8k_precomp': ['train_caps.txt', 'dev_caps.txt'],
     '10crop_precomp': ['train_caps.txt', 'dev_caps.txt'],
     'f30k_precomp': ['train_caps.txt', 'dev_caps.txt'],

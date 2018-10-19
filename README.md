@@ -66,6 +66,8 @@ nltk.download('punkt')
 
 ### <a name="data"></a> Download data
 
+* TODO: update this
+
 Pre-computed features: 
 ```bash
 wget http://lsa.pucrs.br/jonatas/seam-data/irv2_precomp.tar.gz
@@ -77,6 +79,8 @@ wget http://lsa.pucrs.br/jonatas/seam-data/vocab.tar.gz
 * Extract `vocab.tar.gz` to `./vocab` directory (*required for baselines only*).
 
 ## <a name="evaluate"></a> Evaluate pre-trained models
+
+* TODO: update this
 
 ```python
 from vocab import Vocabulary
