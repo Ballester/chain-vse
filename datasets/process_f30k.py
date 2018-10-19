@@ -6,6 +6,10 @@ from glob import glob
 from tqdm import tqdm 
 from collections import defaultdict
 from sklearn.preprocessing import StandardScaler
+try:
+    import cPickle as pickle
+except:
+    import _pickle as pickle
 
 
 def get_args():
@@ -71,8 +75,7 @@ def save(outpath, feats, caps, ids, split, scaler=None):
             fp.flush()
     
     if scaler is not None:
-        import cPickle as pickle
-        with open(os.path.join(outpath, 'scaler.pkl'), 'w') as fp:
+        with open(os.path.join(outpath, 'scaler.pkl'), 'wb') as fp:
             pickle.dump(scaler, fp)
 
 

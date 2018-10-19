@@ -6,7 +6,10 @@ import os
 from tqdm import tqdm
 from sklearn.preprocessing import StandardScaler
 from collections import OrderedDict
-import cPickle as pickle
+try:
+    import cPickle as pickle
+except:
+    import _pickle as pickle
 
 
 def get_args():
@@ -21,7 +24,7 @@ args = get_args()
 
 def main():
 
-    f = glob('{}/*/*.npy'.format(args.feat_path))
+    f = glob('{}/*.npy'.format(args.feat_path))
     print('Files found {}'.format(len(f)))
     if len(f) == 0:
         print('Error!')
@@ -87,8 +90,7 @@ def save(outpath, feats, caps, ids, split, scaler=None):
             fp.flush()
     
     if scaler is not None:
-        import cPickle as pickle
-        with open(os.path.join(outpath, 'scaler.pkl'), 'w') as fp:
+        with open(os.path.join(outpath, 'scaler.pkl'), 'wb') as fp:
             pickle.dump(scaler, fp)
 
 
@@ -105,9 +107,9 @@ def get_split_instances(ids, path, coco1, coco2):
         
         caption = instance['caption']
         #captions.append(caption)
-        folder = '_'.join(img['file_name'].split('_')[1:2])
+        
         img_name = os.path.join(img['file_name'])
-        feat_path = os.path.join(path, folder, img_name + '.npy')
+        feat_path = os.path.join(path, img_name + '.npy')
         try:
             features_path[feat_path].append(caption)
         except KeyError:
