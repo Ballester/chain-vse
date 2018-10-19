@@ -121,7 +121,7 @@ def get_data(features_path,):
     features = []
     captions = []
     for fpath, caption in tqdm(features_path.items()):
-        feature = np.load(fpath).mean(-1).mean(-1)
+        feature = np.load(fpath)#.mean(-1).mean(-1)
         features.append(feature)
         captions.extend(caption)
 
