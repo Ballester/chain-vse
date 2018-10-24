@@ -50,34 +50,6 @@ def EncoderImage(data_name, img_dim, embed_size, finetune=False,
     return img_enc
 
 
-class GaussianNoise(nn.Module):
-    """Gaussian noise regularizer.
-
-    Args:
-        sigma (float, optional): relative standard deviation used to generate the
-            noise. Relative means that it will be multiplied by the magnitude of
-            the value your are adding the noise to. This means that sigma can be
-            the same regardless of the scale of the vector.
-        is_relative_detach (bool, optional): whether to detach the variable before
-            computing the scale of the noise. If `False` then the scale of the noise
-            won't be seen as a constant but something to optimize: this will bias the
-            network to generate vectors with smaller values.
-    """
-
-    def __init__(self, sigma=0.1, is_relative_detach=True):
-        super().__init__()
-        self.sigma = sigma
-        self.is_relative_detach = is_relative_detach
-        self.noise = torch.tensor(0).to(device)
-
-    def forward(self, x):
-        if self.training and self.sigma != 0:
-            scale = self.sigma * x.detach() if self.is_relative_detach else self.sigma * x
-            sampled_noise = self.noise.repeat(*x.size()).normal_() * scale
-            x = x + sampled_noise
-        return x 
-
-
 # tutorials/09 - Image Captioning
 class EncoderImageFull(nn.Module):
 
@@ -190,24 +162,14 @@ class EncoderImagePrecomp(nn.Module):
         self.fc = fc
         if is_tensor:
             conv = nn.Sequential(*[
-                nn.Conv2d(img_dim, img_dim, 1, bias=False),
-                nn.BatchNorm2d(img_dim),
-
                 nn.Conv2d(img_dim, img_dim/2, 1, bias=False),
                 nn.BatchNorm2d(img_dim/2),
                 nn.ReLU(inplace=True),
                 nn.Conv2d(img_dim/2, img_dim, 3, padding=1, bias=False),
                 nn.BatchNorm2d(img_dim),
                 nn.ReLU(inplace=True),
-
-                nn.Conv2d(img_dim, img_dim/2, 1, bias=False),
-                nn.BatchNorm2d(img_dim/2),
-                nn.ReLU(inplace=True),
-                nn.Conv2d(img_dim/2, img_dim, 3, padding=1, bias=False),
-                nn.BatchNorm2d(img_dim),
-                nn.ReLU(inplace=True),
-
                 nn.Conv2d(img_dim, embed_size, kernel_size=1, bias=False),
+                nn.BatchNorm2d(embed_size),
                 nn.ReLU(inplace=True),
                 nn.AdaptiveAvgPool2d(1),
                 Flatten(dims=(-1, -1)),

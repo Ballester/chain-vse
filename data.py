@@ -353,9 +353,13 @@ def collate_fn(data):
     return images, targets, lengths, ids
 
 
-def get_loader_single(data_name, split, root, json, tokenizer, transform,
-                      batch_size=100, shuffle=True,
-                      num_workers=2, ids=None, collate_fn=collate_fn):
+def get_loader_single(
+        data_name, split, root,
+        json, tokenizer, transform,
+        batch_size=100, shuffle=True,
+        num_workers=2, ids=None,
+        collate_fn=collate_fn
+    ):
     """Returns torch.utils.data.DataLoader for custom coco dataset."""
     if 'coco' in data_name:
         # COCO custom dataset
@@ -426,93 +430,27 @@ def get_precomp_loader(
 
 
 def get_transform(data_name, split_name, opt):
+
     normalizer = transforms.Normalize(
         mean=[0.485, 0.456, 0.406],
-        std=[0.229, 0.224, 0.225]
+        std=[0.229, 0.224, 0.225],
     )
 
-    t_list = []
     if split_name == 'train':
         t_list = [
             transforms.Scale(256),
             transforms.RandomSizedCrop(opt.crop_size),
             transforms.RandomHorizontalFlip(),
         ]
-    elif split_name == 'val':
-        t_list = [transforms.Scale(256), transforms.CenterCrop(224)]
-    elif split_name == 'test':
-        t_list = [transforms.Scale(256), transforms.CenterCrop(224)]
+    elif split_name in ['val', 'test']:
+        t_list = [
+            transforms.Scale(256),
+            transforms.CenterCrop(opt.crop_size),
+        ]
 
     t_end = [transforms.ToTensor(), normalizer]
     transform = transforms.Compose(t_list + t_end)
     return transform
-
-
-def _get_loaders(
-    data_name, tokenizer, crop_size, 
-    batch_size, workers, opt, collate_fn_str='collate_fn'):
-    
-    dpath = os.path.join(opt.data_path, data_name)
-    cfn = eval(collate_fn_str)
-
-    if opt.data_name.endswith('_precomp'):
-        train_loader = get_precomp_loader(dpath, 'train', tokenizer, opt,
-                                          batch_size, True, workers, cfn)
-
-        val_loader = get_precomp_loader(dpath, 'dev', tokenizer, opt,
-                                        batch_size, False, workers,
-                                        cfn)
-        if opt.add_data:
-            adapt_dataset = UnlabeledPrecompDataset(dpath, sigma=opt.noise)
-
-            adapt_loader = torch.utils.data.DataLoader(dataset=adapt_dataset,
-                                            batch_size=batch_size,
-                                            shuffle=True,
-                                            pin_memory=True)
-            return (train_loader, adapt_loader), val_loader
-
-    else:
-        # Build Dataset Loader
-        roots, ids = get_paths(dpath, data_name, opt.use_restval)
-
-        transform = get_transform(data_name, 'train', opt)
-        train_loader = get_loader_single(
-            opt.data_name, 'train',
-            roots['train']['img'],
-            roots['train']['cap'],
-            tokenizer, transform, ids=ids['train'],
-            batch_size=batch_size, shuffle=True,
-            num_workers=workers,
-            collate_fn=cfn,
-        )
-
-        transform = get_transform(data_name, 'val', opt)
-        val_loader = get_loader_single(
-            opt.data_name, 'val',
-            roots['val']['img'],
-            roots['val']['cap'],
-            tokenizer, transform, ids=ids['val'],
-            batch_size=batch_size, shuffle=False,
-            num_workers=workers,
-            collate_fn=cfn,
-        )
-
-        if opt.add_data:
-            adapt_dataset = UnlabeledCocoDataset(
-                                root=roots['unlabeled']['img'],
-                                transform=transform)
-
-            adapt_loader = torch.utils.data.DataLoader(
-                dataset=adapt_dataset,
-                batch_size=batch_size,
-                shuffle=True,
-                pin_memory=True,
-                num_workers=4,
-            )
-
-            return (train_loader, adapt_loader), val_loader
-
-    return train_loader, val_loader
 
 
 def get_loader(
@@ -567,7 +505,6 @@ def get_loader(
                 shuffle=(split == 'train'),
                 num_workers=workers,
                 collate_fn=collate_fn,
-                adapt_set=adapt_set,
             )
 
         elif split == 'adapt':
@@ -588,14 +525,19 @@ def get_loader(
     
 
 
-def get_test_loader(split_name, data_name, tokenizer, crop_size, batch_size,
-                    workers, opt, collate_fn_str='collate_fn'):
+def get_test_loader(
+        split_name, data_name, tokenizer, 
+        crop_size, batch_size, workers, 
+        opt, collate_fn_str='collate_fn'
+    ):
 
     cfn = eval(collate_fn_str)
     dpath = os.path.join(opt.data_path, data_name)
     if opt.data_name.endswith('_precomp'):
-        test_loader = get_precomp_loader(dpath, split_name, tokenizer, opt,
-                                         batch_size, False, workers)
+        test_loader = get_precomp_loader(
+            dpath, split_name, tokenizer, opt,
+            batch_size, False, workers
+        )
     else:
         # Build Dataset Loader
         roots, ids = get_paths(dpath, data_name, opt.use_restval)
@@ -608,7 +550,7 @@ def get_test_loader(split_name, data_name, tokenizer, crop_size, batch_size,
             tokenizer, transform, ids=ids[split_name],
             batch_size=batch_size, shuffle=False,
             num_workers=workers,
-            collate_fn=collate_fn
+            collate_fn=collate_fn,
         )
     return test_loader
 
@@ -627,8 +569,3 @@ def get_tokenizer(vocab_path, data_name):
         vocab_size = tokenizer.vocab_size
 
     return tokenizer, vocab_size
-
-
-def splitlist(iterable, splitters):
-    import itertools
-    return [(list(g)) for k, g in itertools.groupby(iterable, lambda x: x in splitters) if not k]

@@ -305,8 +305,7 @@ text_encoders_alias = {
                     'nb_towers': 4,
                     'nb_filters': 256,
                     'pool': 'max', 
-    }},
-  
+    }}, 
 }
 
 
