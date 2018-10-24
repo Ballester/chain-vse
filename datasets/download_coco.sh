@@ -1,0 +1,5 @@
+wget http://images.cocodataset.org/zips/train2014.zip
+wget http://images.cocodataset.org/zips/val014.zip
+wget http://images.cocodataset.org/zips/test2014.zip
+wget http://images.cocodataset.org/zips/unlabeled2017.zip
+

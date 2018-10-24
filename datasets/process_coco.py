@@ -15,7 +15,7 @@ except:
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--feat_path', '-f')
-    parser.add_argument('--ann_path', '-a')    
+    parser.add_argument('--ann_path', '-a')
     parser.add_argument('--out_path', '-o')
     parser.add_argument('--normalize', action='store_true')
     return parser.parse_args()
@@ -30,21 +30,33 @@ def main():
         print('Error!')
         exit()
 
-    coco1 = coco.COCO(annotation_file=os.path.join(args.ann_path, 'captions_train2014.json'))
-    coco2 = coco.COCO(annotation_file=os.path.join(args.ann_path, 'captions_val2014.json'))
+    coco1 = coco.COCO(
+        annotation_file=os.path.join(
+            args.ann_path, 'captions_train2014.json'
+        )
+    )
+    coco2 = coco.COCO(
+        annotation_file=os.path.join(
+            args.ann_path, 'captions_val2014.json'
+        )
+    )
 
     print('Anns loaded')
 
     for split in ['train', 'val', 'test']:
         tqdm.write('Processing split {}'.format(split))
         
-        load_ids = lambda x: list(np.load(os.path.join(args.ann_path, x)))
+        load_ids = lambda x: list(
+            np.load(os.path.join(args.ann_path, x))
+        )
         if split == 'train':
             ids = load_ids('coco_train_ids.npy')
             ids += load_ids('coco_restval_ids.npy')
             
         else:
-            ids = load_ids('coco_{}_ids.npy'.format(split.replace('val', 'dev')))
+            ids = load_ids('coco_{}_ids.npy'.format(
+                split.replace('val', 'dev'))
+            )
 
         tqdm.write('Loaded {} ids for {} set'.format(len(ids), split))
 
@@ -78,15 +90,23 @@ def main():
 
 def save(outpath, feats, caps, ids, split, scaler=None):
     np.save(
-        os.path.join(args.out_path, '{}_ims.npy'.format(split)), feats
+        os.path.join(
+            args.out_path, '{}_ims.npy'.format(split)
+        ), feats
     )
     np.save(
-        os.path.join(args.out_path, '{}_ids.npy'.format(split)), ids
+        os.path.join(
+            args.out_path, '{}_ids.npy'.format(split)
+        ), ids
     )
 
-    with open(os.path.join(outpath, '{}_caps.txt'.format(split)), 'w') as fp:
+    with open(
+            os.path.join(
+                outpath, '{}_caps.txt'.format(split)
+            ), 'w'
+        ) as fp:
         for l in caps:
-            fp.write('{}\n'.format(l))
+            fp.write('{}\n'.format(l.replace('\n', '')))
             fp.flush()
     
     if scaler is not None:
