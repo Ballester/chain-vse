@@ -32,12 +32,17 @@ Overview:
 | VSE+EMA   | Precomp     | `flickr`    |    -          |  45.0    |  83.5   | 31.9    |  72.2   | `run_baseline.sh #1` |
 
 
-### Domain daptation Coco -> Flickr
-| Method    |  Feat       | TrainSet    | AdaptSet      | R@1     | R@10    | R@1     | R@10    | Settings              | 
-| :-------: |:----:       | :----:      | :-----:       | :-----: | :-----: | :-----: | :-----: | :-----:               | 
-| VSEPP     |  Precomp    | `coco`      | `f30k-train`  |  33.4   |  76.4   | 22.6    |   63.1  |                       |
-| VSE+EMA   |  Finetune   | `coco-ft`   | `unlabeled`   |  44.2   |  81.4   | 33.2    |  72.2   |                       |
+### Domain daptation COCO -> Flickr
 
+| Method     |  Feat       | TrainSet    | AdaptSet      | R@1     | R@10    | R@1     | R@10    | Settings              | 
+| :-------:  |:----:       | :----:      | :-----:       | :-----: | :-----: | :-----: | :-----: | :-----:               | 
+| *Baseline  |  -          | `coco`      | `f30k-train`  |  27.2   |  65.1   | 20.4    |  52.8   |                       |
+| *RFF-Net   |  Precomp    | `coco`      | `f30k-train`  |  28.8   |  66.4   | 21.3    |  53.7   |                       |
+| *RFF-Net-E |  Precomp    | `coco`      | `f30k-train`  |  31.5   |  68.6   | 23.4    |  56.8   |                       |
+| *VSEPP     |  Precomp    | `coco`      | `f30k-train`  |  33.4   |  76.4   | 22.6    |  63.1   |                       |
+|  VSE+EMA   |  Finetune   | `coco-ft`   | `unlabeled`   |  44.2   |  81.4   | 33.2    |  72.2   |                       |
+
+(*) denotes baseline methods
 
 ## Test Set COCO (5k-cv)
 | Method    | Feat        | TrainSet    | AdaptSet      | R@1     | R@10    | R@1     | R@10    | Settings              | 
@@ -66,8 +71,6 @@ nltk.download('punkt')
 
 ### <a name="data"></a> Download data
 
-* TODO: update this
-
 Pre-computed features: 
 ```bash
 wget http://lsa.pucrs.br/jonatas/seam-data/irv2_precomp.tar.gz
@@ -79,8 +82,6 @@ wget http://lsa.pucrs.br/jonatas/seam-data/vocab.tar.gz
 * Extract `vocab.tar.gz` to `./vocab` directory (*required for baselines only*).
 
 ## <a name="evaluate"></a> Evaluate pre-trained models
-
-* TODO: update this
 
 ```python
 from vocab import Vocabulary

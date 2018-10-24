@@ -306,6 +306,7 @@ text_encoders_alias = {
                     'nb_filters': 256,
                     'pool': 'max', 
     }},
+  
 }
 
 

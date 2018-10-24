@@ -175,18 +175,20 @@ if __name__ == '__main__':
     args = parser.parse_args()    
 
     transform = get_transform(
-        nb_crops=args.nb_crops, 
-        crop_size=args.crop_size, 
-        resize=args.resize
+        nb_crops=args.nb_crops,
+        crop_size=args.crop_size,
+        resize=args.resize,
     )
 
     dataset = CustomImageData(
-        path=args.datapath, 
-        transforms=transform
-    )    
+        path=args.datapath,
+        transforms=transform,
+    )
     loader = DataLoader(
-        dataset, batch_size=args.batch_size, 
-        shuffle=False, num_workers=args.num_workers
+        dataset,
+        batch_size=args.batch_size,
+        shuffle=False,
+        num_workers=args.num_workers,
     )
     
     model = get_network(arch='resnet152')

@@ -190,16 +190,26 @@ class EncoderImagePrecomp(nn.Module):
         self.fc = fc
         if is_tensor:
             conv = nn.Sequential(*[
+                nn.Conv2d(img_dim, img_dim, 1, bias=False),
+                nn.BatchNorm2d(img_dim),
+
                 nn.Conv2d(img_dim, img_dim/2, 1, bias=False),
                 nn.BatchNorm2d(img_dim/2),
                 nn.ReLU(inplace=True),
                 nn.Conv2d(img_dim/2, img_dim, 3, padding=1, bias=False),
                 nn.BatchNorm2d(img_dim),
                 nn.ReLU(inplace=True),
-                nn.Conv2d(img_dim, embed_size, kernel_size=1, bias=False),
-                nn.BatchNorm2d(embed_size),
+
+                nn.Conv2d(img_dim, img_dim/2, 1, bias=False),
+                nn.BatchNorm2d(img_dim/2),
                 nn.ReLU(inplace=True),
-                nn.AdaptiveAvgPool2d(1),                
+                nn.Conv2d(img_dim/2, img_dim, 3, padding=1, bias=False),
+                nn.BatchNorm2d(img_dim),
+                nn.ReLU(inplace=True),
+
+                nn.Conv2d(img_dim, embed_size, kernel_size=1, bias=False),
+                nn.ReLU(inplace=True),
+                nn.AdaptiveAvgPool2d(1),
                 Flatten(dims=(-1, -1)),
             ]).cuda()
             self.fc = conv
@@ -215,9 +225,7 @@ class EncoderImagePrecomp(nn.Module):
         """Extract image feature vectors."""
         # assuming that the precomputed features are already l2-normalized
                 
-        features = self.fc(images)
-        if len(features.shape) == 4:
-            features.squeeze(-1).squeeze(-1)
+        features = self.fc(images)        
 
         # normalize in the joint embedding space
         if not self.no_imgnorm:
