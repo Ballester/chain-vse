@@ -90,6 +90,9 @@ class CocoDataset(data.Dataset):
             transform: transformer for image.
         """
         self.root = root
+        self.split = None 
+        self.data_path = root
+
         # when using `restval`, two json files are needed
         if isinstance(json, tuple):
             self.coco = (COCO(json[0]), COCO(json[1]))
@@ -122,13 +125,13 @@ class CocoDataset(data.Dataset):
         target = tokenizer.tokenize_text(caption)
         
         if self.transform is not None:
-            image = self.transform(image)
+            image_orig = self.transform(image)
 
             if self.adapt_set:
                 image_adapt = self.transform(image)
-                return (image, image_adapt), target, index, img_id
+                return (image_orig, image_adapt), target, index, img_id
                 
-        return image, target, index, img_id
+        return image_orig, target, index, img_id
 
     def get_raw_item(self, index):
         if index < self.bp:
@@ -164,6 +167,8 @@ class UnlabeledCocoDataset(data.Dataset):
         self.files = os.listdir(root)
         self.n = len(self.files)
         self.transform = transform
+        self.data_path = root 
+        self.split = 'unlabeled'
 
     def __getitem__(self, index):
         """This function returns a tuple that is further passed to collate_fn
@@ -189,6 +194,7 @@ class FlickrDataset(data.Dataset):
 
     def __init__(self, root, json, split, tokenizer, transform=None, adapt_set=False):
         self.root = root
+        self.data_path = root
         self.tokenizer = tokenizer
         self.split = split
         self.transform = transform
@@ -214,12 +220,12 @@ class FlickrDataset(data.Dataset):
         
         image = Image.open(os.path.join(root, path)).convert('RGB')
         if self.transform is not None:
-            image = self.transform(image)
+            image_orig = self.transform(image)
             if self.adapt_set:
                 image_adapt = self.transform(image)
-                return (image, image_adapt), target, index, img_id
+                return (image_orig, image_adapt), target, index, img_id
         
-        return image, target, index, img_id
+        return image_orig, target, index, img_id
 
     def __len__(self):
         return len(self.ids)
@@ -233,6 +239,8 @@ class UnlabeledPrecompDataset(data.Dataset):
         print(self.features.shape)        
         print('Loaded {} unlabeled image features'.format(self.n))
         self.sigma = sigma   
+        self.data_path = data_path 
+        self.split = 'unlabeled'
     
     def __len__(self,):
         return self.n
@@ -358,9 +366,11 @@ def get_loader_single(
         json, tokenizer, transform,
         batch_size=100, shuffle=True,
         num_workers=2, ids=None,
-        collate_fn=collate_fn
+        collate_fn=collate_fn,
+        adapt_set=False,
     ):
     """Returns torch.utils.data.DataLoader for custom coco dataset."""
+
     if 'coco' in data_name:
         # COCO custom dataset
         dataset = CocoDataset(
@@ -368,7 +378,8 @@ def get_loader_single(
             json=json,
             tokenizer=tokenizer,
             transform=transform,
-            ids=ids
+            ids=ids,
+            adapt_set=adapt_set,
         )
 
     elif 'f8k' in data_name or 'f30k' in data_name:
@@ -377,7 +388,8 @@ def get_loader_single(
             split=split,
             json=json,
             tokenizer=tokenizer,
-            transform=transform
+            transform=transform,
+            adapt_set=adapt_set,
         )
 
     # It crashes when using CPU-only and pin_memory
@@ -392,7 +404,7 @@ def get_loader_single(
         shuffle=shuffle,
         pin_memory=pin_memory,
         num_workers=num_workers,
-        collate_fn=collate_fn
+        collate_fn=collate_fn,
     )
 
     return data_loader
@@ -423,7 +435,7 @@ def get_precomp_loader(
         batch_size=batch_size,
         shuffle=shuffle,
         pin_memory=pin_memory,
-        collate_fn=collate_fn
+        collate_fn=collate_fn,
     )
     
     return data_loader
@@ -448,7 +460,7 @@ def get_transform(data_name, split_name, opt):
             transforms.CenterCrop(opt.crop_size),
         ]
 
-    t_end = [transforms.ToTensor(), normalizer]
+    t_end = [transforms.ToTensor(), normalizer,]
     transform = transforms.Compose(t_list + t_end)
     return transform
 
@@ -456,7 +468,7 @@ def get_transform(data_name, split_name, opt):
 def get_loader(
         data_name, tokenizer, crop_size, 
         batch_size, workers, opt, 
-        split='train', adapt_set=False
+        split='train', adapt_set=False,
     ):
     
     dpath = os.path.join(opt.data_path, data_name)    
@@ -493,8 +505,9 @@ def get_loader(
 
         if split in ['train', 'val', 'test']:
             transform = get_transform(data_name, split, opt)
+   
             loader = get_loader_single(
-                data_name=opt.data_name,
+                data_name=data_name,
                 split=split,
                 root=roots[split]['img'],
                 json=roots[split]['cap'],
@@ -505,6 +518,7 @@ def get_loader(
                 shuffle=(split == 'train'),
                 num_workers=workers,
                 collate_fn=collate_fn,
+                adapt_set=adapt_set,
             )
 
         elif split == 'adapt':

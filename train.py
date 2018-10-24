@@ -127,13 +127,12 @@ def main():
                         help='Consistency alpha before ema_late_epoch')
     parser.add_argument('--consistency_alpha_late', type=float, default=0.999,
                         help='Consistency alpha after ema_late_epoch')
-    parser.add_argument('--consistency_rampup', type=int, default=100,
+    parser.add_argument('--consistency_rampup', type=int, default=15,
                         help='Consistency rampup epoch')
-    parser.add_argument('--ema_late_epoch', type=int, default=50,
+    parser.add_argument('--ema_late_epoch', type=int, default=15,
                         help='When to change alpha variable for consistency weight')
     parser.add_argument('--adapt_loss', type=str, default='mse',
                         help='Loss used to perform domain adapt.')
-
 
     opt = parser.parse_args()
 
@@ -374,10 +373,10 @@ def train(
         batch_time.update(time.time() - end)
         end = time.time()
 
-        tb_writer.add_scalar('Iter', model.Eiters, model.Eiters)
-        tb_writer.add_scalar('Lr', model.optimizer.param_groups[0]['lr'], model.Eiters)
-        tb_writer.add_scalar('Consistency weight', consistency_weight, model.Eiters)
-        
+        model.logger.update('Iter', model.Eiters, 0)
+        model.logger.update('Lr', model.optimizer.param_groups[0]['lr'], 0)
+        model.logger.update('Consistency weight', consistency_weight, 0)
+
         model.logger.update('Contr Loss', loss.item(), )
         model.logger.update('Adapt Loss', consistency_loss.item(), )
         model.logger.update('Total Loss', total_loss.item(), )

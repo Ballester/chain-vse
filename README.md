@@ -61,7 +61,9 @@ We recommended to use Anaconda for the following packages.
 * Python 2.7 or 3.x
 * [PyTorch](http://pytorch.org/) (>0.1.12)
 * [NumPy](http://www.numpy.org/) (>1.12.1)
+* pycocotools: `pip install pycocotools`
 * TensorBoardX: `pip install tensorboardX`
+* tqdm: `pip install tqdm`
 * Punkt Sentence Tokenizer:
 ```
 python
