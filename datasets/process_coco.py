@@ -17,6 +17,7 @@ def get_args():
     parser.add_argument('--feat_path', '-f')
     parser.add_argument('--ann_path', '-a')
     parser.add_argument('--out_path', '-o')
+    parser.add_argument('--avg_pool', action='store_true')    
     parser.add_argument('--normalize', action='store_true')
     return parser.parse_args()
 
@@ -73,10 +74,17 @@ def main():
             scaler = StandardScaler()
             scaler.fit(feats.mean(-1).mean(-1))
     
-        # if args.normalize:
-        #     tqdm.write('Applying standard scaler in {}'.format(split))            
-        #     feats = scaler.transform(feats.mean(-1).mean(-1))
-    
+        
+        if args.avg_pool:
+            print('avg pooling', feats.shape)
+            feats = feats.mean(-1).mean(-1)
+            print('-->', feats.shape)
+
+        if args.normalize:
+            tqdm.write('Applying standard scaler in {}'.format(split))            
+            feats = scaler.transform(feats.mean(-1).mean(-1))
+
+
         tqdm.write('Saving {} set'.format(split))
         save(
             outpath=args.out_path, 

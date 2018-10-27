@@ -8,17 +8,10 @@ import argparse
 import os
 
 annotations = {
-    'coco_precomp': ['train_caps.txt', 'dev_caps.txt'],
-    '10resnet152_precomp': [
-        'train_caps.txt', 'val_caps.txt',
-        'ftrain_caps.txt', 'fval_caps.txt',
-    ],
+    'coco_precomp': ['train_caps.txt', 'val_caps.txt', 'a', 'b'],
     'coco': ['annotations/captions_train2014.json',
              'annotations/captions_val2014.json',],    
-    'f8k_precomp': ['train_caps.txt', 'dev_caps.txt'],
-    '10crop_precomp': ['train_caps.txt', 'dev_caps.txt'],
-    'f30k_precomp': ['train_caps.txt', 'dev_caps.txt'],
-    'f8k': ['dataset_flickr8k.json'],
+    'f30k_precomp': ['train_caps.txt', 'val_caps.txt', 'a', 'b'],
     'f30k': ['dataset_flickr30k.json'],
 }
 

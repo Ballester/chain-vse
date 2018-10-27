@@ -47,11 +47,13 @@ class GRUTextEncoder(nn.Module):
             self.fc.weight.data.uniform_(-r, r)
             self.fc.bias.data.fill_(0)
 
-    def forward(self, x, lengths):
+    def forward(self, x, lengths, dropout=0):
         """Handles variable size captions
         """
         # Embed word ids to vectors
         x = self.embed(x)
+        x = nn.Dropout(dropout)(x)
+
         packed = pack_padded_sequence(x, lengths, batch_first=True)
 
         # Forward propagate RNN

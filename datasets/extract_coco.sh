@@ -1,20 +1,36 @@
-python extract_features.py \
---datapath /home/teia/datasets/vse/coco/images/train2014/ \
---outpath /home/teia/datasets/vse/precomp_coco_temp/ \
---batch_size 50 \
---nb_crops 10 \
---num_workers 4
+# python extract_features.py \
+# --datapath /A/VSE/data/coco/images/train2014/ \
+# --outpath /A/VSE/temp/coco/ \
+# --batch_size 50 \
+# --num_workers 6 \
+# --nb_crops 10 \
+# --resize 256 \
+# --crop_size 256 \
 
 python extract_features.py \
---datapath /home/teia/datasets/vse/coco/images/val2014/ \
---outpath /home/teia/datasets/vse/precomp_coco_temp/ \
+--datapath /A/VSE/data/coco/images/val2014/ \
+--outpath /A/VSE/temp/coco/ \
 --batch_size 50 \
+--num_workers 6 \
 --nb_crops 10 \
---num_workers 4
+--resize 256 \
+--crop_size 256 \
 
 python extract_features.py \
---datapath /home/teia/datasets/vse/coco/images/test2014/ \
---outpath /home/teia/datasets/vse/precomp_coco_temp/ \
+--datapath /A/VSE/data/coco/images/test2014/ \
+--outpath /A/VSE/temp/coco/ \
 --batch_size 50 \
+--num_workers 6 \
 --nb_crops 10 \
---num_workers 4
+--resize 256 \
+--crop_size 256 \
+
+# python extract_features.py \
+# --datapath /A/VSE/data/coco/images/unlabeled/ \
+# --outpath /A/VSE/temp/coco/ \
+# --batch_size 65 \
+# --num_workers 6 \
+# --nb_crops 10 \
+# --resize 256 \
+# --crop_size 256 \
+

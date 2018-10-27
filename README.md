@@ -25,30 +25,35 @@ Overview:
 ` TODO: update results `
 
 ### Flickr30k 
-| Method    | Feat        | TrainSet    | AdaptSet      | R@1      | R@10    | R@1     | R@10    | Settings             | 
-| :-------: |:----:       | :----:      | :-----:       | :-----:  | :-----: | :-----: | :-----: | :-----:              | 
-| VSEPP     | Finetune    | `flickr`    |    -          |  52.9    |  87.2   | 39.6    |  79.5   |                      |
-| VSEPP     | Precomp     | `flickr`    |    -          |  46.8    |  84.0   | 33.9    |  73.1   |                      |
-| VSE+EMA   | Precomp     | `flickr`    |    -          |  45.0    |  83.5   | 31.9    |  72.2   | `run_baseline.sh #1` |
+| Method         | TrainSet    | TestSet      | R@1      | R@10    | R@1     | R@10    | Settings             | 
+| :-------:      | :----:      | :-----:      | :-----:  | :-----: | :-----: | :-----: | :-----:              | 
+| VSEPP          | `flickr`    | `f30k-test`  |  46.8    |  84.0   | 33.9    |  73.1   |                      |
+| VSE+EMA        | `flickr`    | `f30k-test`  |  45.0    |  83.5   | 31.9    |  72.2   | `run_baseline.sh #1` |
 
 
 ### Domain daptation COCO -> Flickr
 
-| Method     |  Feat       | TrainSet    | AdaptSet      | R@1     | R@10    | R@1     | R@10    | Settings              | 
-| :-------:  |:----:       | :----:      | :-----:       | :-----: | :-----: | :-----: | :-----: | :-----:               | 
-| *Baseline  |  -          | `coco`      | `f30k-train`  |  27.2   |  65.1   | 20.4    |  52.8   |                       |
-| *RFF-Net   |  Precomp    | `coco`      | `f30k-train`  |  28.8   |  66.4   | 21.3    |  53.7   |                       |
-| *RFF-Net-E |  Precomp    | `coco`      | `f30k-train`  |  31.5   |  68.6   | 23.4    |  56.8   |                       |
-| *VSEPP     |  Precomp    | `coco`      | `f30k-train`  |  33.4   |  76.4   | 22.6    |  63.1   |                       |
-|  VSE+EMA   |  Finetune   | `coco-ft`   | `unlabeled`   |  44.2   |  81.4   | 33.2    |  72.2   |                       |
+| Method        | TrainSet      | TestSet      | R@1     | R@10    | R@1     | R@10    | Settings              | 
+| :-------:     | :----:        | :-----:      | :-----: | :-----: | :-----: | :-----: | :-----:               | 
+| *Baseline     | `coco`        | `f30k-test`  |  27.2   |  65.1   | 20.4    |  52.8   |                       |
+| *RFF-Net      | `coco`        | `f30k-test`  |  28.8   |  66.4   | 21.3    |  53.7   |                       |
+| *VSEPP        | `coco`        | `f30k-test`  |  33.4   |  76.4   | 22.6    |  63.1   |                       |
+| CHAIN         | `coco`        | `f30k-test`  |         |         |         |         |                       |
+| CHAIN(c=1)    | `coco` &rarr; `f30k-val`       | `f30k-test`  |         |         |         |         |                       |
+| CHAIN(c=10)   | `coco` &rarr; `f30k-val`       | `f30k-test`  |         |         |         |         |                       |
+| CHAIN(c=20)   | `coco` &rarr; `f30k-val`       | `f30k-test`  |         |         |         |         |                       |
+| SCAN-t2i      | `coco`      | `f30k-test`  |         |         |         |         |                       |
+| SCAN-i2t      | `coco`      | `f30k-test`  |         |         |         |         |                       |
+| SCAN-t2i(c=1)    | `coco` &rarr; `f30k-val`    | `f30k-test`  |         |         |         |         |                       |
+| SCAN-i2t(c=1)    | `coco` &rarr; `f30k-val`    | `f30k-test`  |         |         |         |         |                       |
+| SCAN-t2i(c=10)    | `coco` &rarr; `f30k-val`    | `f30k-test`  |         |         |         |         |                       |
+| SCAN-i2t(c=10)    | `coco` &rarr; `f30k-val`    | `f30k-test`  |         |         |         |         |                       |
+| SCAN-t2i(c=20)    | `coco` &rarr; `f30k-val`    | `f30k-test`  |         |         |         |         |                       |
+| SCAN-i2t(c=20)    | `coco` &rarr; `f30k-val`    | `f30k-test`  |         |         |         |         |                       |
+
 
 (*) denotes baseline methods
 
-## Test Set COCO (5k-cv)
-| Method    | Feat        | TrainSet    | AdaptSet      | R@1     | R@10    | R@1     | R@10    | Settings              | 
-| :-------: | :-:         | :----:      | :-----:       | :-----: | :-----: | :-----: | :-----: | :-----:               | 
-| VSEPP     |  Finetune   | `coco`      |    -          |  64.6   |  95.7   | 52.0    |  92.0   |                       |
-| VSE+EMA   |  Finetune   | `coco`      | `unlabeled`   |  64.1   |  95.9   | 53.2    |  92.9   |                       |
 
 
 ## <a name="start"></a> Getting Started

@@ -276,6 +276,7 @@ class PrecompDataset(data.Dataset):
         loc = data_path + '/'
         self.sigma = sigma
 
+        self.insert_noise = (data_split in ['train', 'unlabeled'])
         # Captions
         self.captions = []
         with open(loc+'%s_caps.txt' % data_split, 'rb') as f:
@@ -304,18 +305,20 @@ class PrecompDataset(data.Dataset):
         img_id = index//self.im_div   
         image = torch.FloatTensor(self.images[img_id])
 
-        image = add_noise(image, self.sigma)        
-
         caption = self.captions[index]
         tokenizer = self.tokenizer
 
         # Convert caption (string) to word ids.
         target = tokenizer.tokenize_text(caption)
-        
+
         if self.adapt_set:
+            image_stu = add_noise(image, self.sigma)
             image_ema = add_noise(image, self.sigma)
-            return (image, image_ema), target, index, img_id
+            return (image_stu, image_ema), target, index, img_id
         
+        if self.insert_noise:
+            image = add_noise(image, self.sigma)
+
         return image, target, index, img_id
 
     def __len__(self):

@@ -109,7 +109,9 @@ def main():
     parser.add_argument('--log_images', action='store_true',
                         help='Wheter to use log images in tensorboard.')
     parser.add_argument('--noise', type=float, default=0.,
-                        help='Ammont of noise for augmenting embeddings.')
+                        help='Ammont of noise for augmenting image features.')
+    parser.add_argument('--dropout_noise', type=float, default=0.,
+                        help='Ammont of noise for augmenting word embeddings.')
     parser.add_argument('--pool', default='max',
                         help='Type of pooling used for conv models.')
     parser.add_argument('--kwargs', type=str, nargs='+', default=None,
@@ -330,8 +332,8 @@ def train(
         if opt.adapt_split != 'unlabeled':            
             with torch.no_grad():
                 adapt_caption = adapt_caption.cuda()
-                ema_adapt_cap_emb = model_ema.txt_enc(adapt_caption, adapt_lens)
-                adapt_cap_mb = model.txt_enc(adapt_caption, adapt_lens)
+                ema_adapt_cap_emb = model_ema.txt_enc(adapt_caption, adapt_lens, dropout=opt.dropout_noise)
+                adapt_cap_mb = model.txt_enc(adapt_caption, adapt_lens, dropout=opt.dropout_noise)
                 consistency_loss_cap = adapt_loss(ema_adapt_cap_emb, adapt_cap_mb)
                         
         with torch.no_grad():
