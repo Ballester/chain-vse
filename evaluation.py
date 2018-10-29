@@ -124,7 +124,7 @@ def encode_data(model, data_loader, log_step=10, logging=print):
 def evalrank(
         model_path, data_path=None, split='dev', 
         fold5=False, test_measure=None, log_step=10000,
-        data_name=None, batch_size=None
+        data_name=None, batch_size=None, 
     ):
     """
     Evaluate a trained model on either dev or test. If `fold5=True`, 5 fold
@@ -314,3 +314,23 @@ def t2i(images, captions, npts=None, measure='cosine', return_ranks=False):
         return (r1, r5, r10, medr, meanr), (ranks, top1)
     else:
         return (r1, r5, r10, medr, meanr)
+
+
+if __name__ == '__main__':
+    from vocab import Vocabulary
+    import argparse 
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--model_path')
+    parser.add_argument('--data_path', default='./data/')
+    parser.add_argument('--split', default='test')
+    parser.add_argument('--dont_use_cv', action='store_false')
+    parser.add_argument('--data_name', default=None,)
+    args = parser.parse_args()
+
+    evalrank(
+        model_path=args.model_path, 
+        data_path=args.data_path, 
+        split=args.split,
+        data_name=args.data_name,
+        fold5=args.dont_use_cv,
+    )
