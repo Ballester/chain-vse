@@ -30,25 +30,20 @@ Overview:
 | VSEPP          | `flickr`    | `f30k-test`  |  46.8    |  84.0   | 33.9    |  73.1   |                      |
 | VSE+EMA        | `flickr`    | `f30k-test`  |  45.0    |  83.5   | 31.9    |  72.2   | `run_baseline.sh #1` |
 
-Image to text: 35.3 62.8 72.5 3.0 23.1
-Average t2i Recall: 43.4
-Text to image: 23.4 47.8 59.0 6.0 41.4
-
-
 ### Domain daptation COCO -> Flickr
 
-| Method        | TrainSet                  | TestSet       | R@1   | R@10  | R@1   | R@10  | Settings              | 
-| :-------:     | :----:                    | :-----:       | :--:  | :---: | :---: | :---: | :-----:               | 
-| *Baseline     | `coco`                    | `f30k-test`   | 27.2  | 65.1  | 20.4  | 52.8  |                       |
-| *RFF-Net      | `coco`                    | `f30k-test`   | 28.8  | 66.4  | 21.3  | 53.7  |                       |
-| *VSEPP        | `coco`                    | `f30k-test`   | 33.4  | 76.4  | 22.6  | 63.1  |                       |
-| CHAIN-noise   | `coco`                    | `f30k-test`   | 35.8  | 73.6  | 23.9  | 59.7  |                       |
-| CHAIN(c=1)    | `coco` &rarr; `f30k-val`  | `f30k-test`   | -     | -     | -     | -     | `CHAIN/run_da.sh`     |
-| CHAIN(c=1e-3) | `coco` &rarr; `f30k-val`  | `f30k-test`   | 36.9  | 75.3  | 23.8  | 60.6  | `CHAIN/run_da.sh`     |
-| CHAIN(c=1e-2) | `coco` &rarr; `f30k-val`  | `f30k-test`   | -     | -     | -     | -     |                       |
-| CHAIN(c=1e-1) | `coco` &rarr; `f30k-val`  | `f30k-test`   | 35.3  | 72.5  | 23.4  | 59.0  |                       |
-| SCAN-i2t      | `coco`                    | `f30k-test`   | 52.9  | 85.9  | 32.8  | 71.3  |  `SCAN/run_coco_f30k_baseline.sh` |
-| SCAN-t2i      | `coco`                    | `f30k-test`   | 50.2  | 86.4  | 39.6  | 76.3  |  `SCAN/run_coco_f30k_baseline.sh` |
+| Method        | TrainSet                  | TestSet       | R@1   | R@10  | R@1   | R@10  | Settings          | 
+| :-------:     | :----:                    | :-----:       | :--:  | :---: | :---: | :---: | :-----:           | 
+| *Baseline     | `coco`                    | `f30k-test`   | 27.2  | 65.1  | 20.4  | 52.8  |                   |
+| *RFF-Net      | `coco`                    | `f30k-test`   | 28.8  | 66.4  | 21.3  | 53.7  |                   |
+| *VSEPP        | `coco`                    | `f30k-test`   | 33.4  | 76.4  | 22.6  | 63.1  |                   |
+| CHAIN-noise   | `coco`                    | `f30k-test`   | 35.8  | 73.6  | 23.9  | 59.7  |                   |
+| CHAIN(c=1)    | `coco` &rarr; `f30k-val`  | `f30k-test`   | Run   | -     | -     | -     | `CHAIN/run_da.sh` |
+| CHAIN(c=1e-3) | `coco` &rarr; `f30k-val`  | `f30k-test`   | 36.9  | 75.3  | 23.8  | 60.6  | `CHAIN/run_da.sh` |
+| CHAIN(c=1e-2) | `coco` &rarr; `f30k-val`  | `f30k-test`   | 35.7  | 74.4  | 22.7  | 59.1  | `CHAIN/run_da.sh` |
+| CHAIN(c=1e-1) | `coco` &rarr; `f30k-val`  | `f30k-test`   | 36.6  | 74.8  | 23.8  | 60.7  | `CHAIN/run_da.sh` |
+| SCAN-i2t      | `coco`                    | `f30k-test`   | 52.9  | 85.9  | 32.8  | 71.3  | `SCAN/run_coco_f30k_baseline.sh` |
+| SCAN-t2i      | `coco`                    | `f30k-test`   | 50.2  | 86.4  | 39.6  | 76.3  | `SCAN/run_coco_f30k_baseline.sh` |
 | SCAN-t2i(c=1) | `coco` &rarr; `f30k-val`  | `f30k-test`   |       |       |       |       |                       |
 | SCAN-i2t(c=1) | `coco` &rarr; `f30k-val`  | `f30k-test`   |       |       |       |       |                       |
 | SCAN-t2i(c=10)| `coco` &rarr; `f30k-val`  | `f30k-test`   |       |       |       |       |                       |
